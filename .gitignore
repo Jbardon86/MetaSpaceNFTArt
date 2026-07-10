@@ -1,0 +1,8 @@
+node_modules/
+.env
+data/tokens.json
+data/ledger.json
+data/mappings.json
+uploads/
+*.log
+.DS_Store

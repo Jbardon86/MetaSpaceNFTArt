@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WalmartCheck → QuickBooks Online</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">✓</span>
+        <div>
+          <div class="brand-title">WalmartCheck → QuickBooks</div>
+          <div class="brand-sub">Import Walmart payments and post them as bank deposits</div>
+        </div>
+      </div>
+      <div id="connection" class="connection">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="connectionText">Checking…</span>
+        <button id="connectBtn" class="btn small hidden">Connect QuickBooks</button>
+        <button id="disconnectBtn" class="btn small ghost hidden">Disconnect</button>
+      </div>
+    </header>
+
+    <main>
+      <div id="configWarning" class="banner warn hidden"></div>
+
+      <!-- STEP 1: Upload -->
+      <section class="card step" id="step-upload">
+        <div class="step-head"><span class="num">1</span><h2>Upload the Walmart spreadsheet</h2></div>
+        <p class="muted">Drop the CSV file Walmart (or your bank) gives you. Column names don't
+          have to match anything — you'll map them in the next step.</p>
+        <div id="dropzone" class="dropzone">
+          <input type="file" id="fileInput" accept=".csv,text/csv" hidden />
+          <div class="dz-inner">
+            <div class="dz-icon">⬆</div>
+            <div><strong>Choose a CSV</strong> or drag it here</div>
+            <div class="muted small" id="fileName"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 2: Map columns -->
+      <section class="card step hidden" id="step-map">
+        <div class="step-head"><span class="num">2</span><h2>Match your columns</h2></div>
+        <p class="muted">We guessed these from your headers. Fix anything that's wrong.
+          Leave a field on <em>“— none —”</em> if your file doesn't have it.</p>
+        <div class="map-grid" id="mapGrid"></div>
+        <div class="options-row">
+          <label class="checkline">
+            <input type="checkbox" id="optGroup" checked />
+            Combine rows that share the same check/reference number into one deposit
+          </label>
+          <label class="checkline">
+            <input type="checkbox" id="optFeesPositive" checked />
+            Fees in the file are positive numbers to be subtracted
+          </label>
+        </div>
+        <div class="actions">
+          <button class="btn" id="previewBtn">Preview deposits →</button>
+        </div>
+      </section>
+
+      <!-- STEP 3: Accounts -->
+      <section class="card step hidden" id="step-accounts">
+        <div class="step-head"><span class="num">3</span><h2>Choose QuickBooks accounts</h2></div>
+        <p class="muted">Where should the money land, and where do Walmart's fees go?
+          These are remembered for next time.</p>
+        <div class="map-grid">
+          <label>Deposit to (bank account)
+            <select id="acctBank"></select>
+          </label>
+          <label>Income account (Walmart sales)
+            <select id="acctIncome"></select>
+          </label>
+          <label>Fee / deduction account (expense)
+            <select id="acctFees"></select>
+          </label>
+        </div>
+      </section>
+
+      <!-- STEP 4: Preview -->
+      <section class="card step hidden" id="step-preview">
+        <div class="step-head"><span class="num">4</span><h2>Review &amp; post</h2></div>
+        <div id="totals" class="totals"></div>
+        <div id="warnings"></div>
+        <div class="table-wrap">
+          <table id="checksTable">
+            <thead>
+              <tr>
+                <th></th><th>Check / Ref</th><th>Date</th><th>Customer</th>
+                <th class="num">Gross</th><th class="num">Fees</th><th class="num">Net</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="actions">
+          <button class="btn" id="postBtn">Post selected to QuickBooks</button>
+          <span id="postHint" class="muted small"></span>
+        </div>
+      </section>
+
+      <!-- Results -->
+      <section class="card step hidden" id="step-results">
+        <div class="step-head"><span class="num">✓</span><h2>Results</h2></div>
+        <div id="resultsSummary"></div>
+        <div class="table-wrap">
+          <table id="resultsTable">
+            <thead><tr><th>Check / Ref</th><th class="num">Net</th><th>Status</th><th>Details</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="actions">
+          <button class="btn ghost" id="startOverBtn">Import another file</button>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast hidden"></div>
+    <script src="/app.js"></script>
+  </body>
+</html>
