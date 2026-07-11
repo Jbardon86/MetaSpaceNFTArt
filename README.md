@@ -1,92 +1,80 @@
 # WalmartCheck → QuickBooks Online
 
-An [A2X](https://www.a2xaccounting.com)-style helper that turns the Walmart
-payment spreadsheet into clean **Bank Deposits** in QuickBooks Online — so
-entering the checks you get from Walmart takes a couple of clicks instead of
-manual data entry.
+Reads the Walmart ACH remittance you get, decodes each line by its deduction
+code and sign, and posts it to QuickBooks Online **exactly the way you'd enter
+it by hand** — a Receive Payment that closes the invoices, plus a Bank Deposit
+that nets down to the actual ACH and parks disputed deductions in Disputed AR.
 
-Upload the CSV → confirm the column mapping → review the deposits → post. Each
-Walmart check becomes one QBO Bank Deposit with an income line (gross sales)
-and a fee line (Walmart's deductions), so the deposit total matches the actual
-check and reconciles cleanly against your bank feed.
+You review both transactions on screen before anything posts.
 
 ---
 
-## Why a Bank Deposit?
+## What it does with a check
 
-Walmart pays you a single check that already nets out their fees. A Bank
-Deposit models that exactly:
+For every row in the remittance, two facts decide where it goes: the **sign**
+(+ payment / − deduction) and the **deduction code**.
 
-| Deposit line | Account | Amount |
-| --- | --- | --- |
-| Walmart sales | Income | **+** gross |
-| Walmart fees / deductions | Expense | **–** fees |
-| **Deposit total** | Bank | **=** net (the check) |
+**Transaction 1 — Receive Payment** (into Undeposited Funds)
+- Applies the payment to each invoice, marked **paid in full**
+- Early-pay discounts + **accepted** deductions are written off (Merchant
+  Deposit Fees #60410) via a small credit memo per invoice
 
-This mirrors how A2X posts marketplace payouts and keeps your income and fee
-expense reported at gross, not net.
+**Transaction 2 — Bank Deposit**
+- Sweeps the Undeposited Funds payment, then adds adjustment lines for anything
+  that can't sit on an invoice:
+  - **Disputed** deductions → negative → **Disputed AR** (recoverable)
+  - **Repaid** disputes → positive → **Disputed AR** (clears it)
+  - **Advertising** fees → **Marketing #60120**; **compliance** fees → **#42500**
+- Deposit total = the ACH that hit your bank
 
----
+The decoder (code → accept / dispute / fee) is set once per code. Any code it
+hasn't seen is flagged for you to classify — it never posts a code blindly.
 
-## Features
+### Worked example (real check 004041349)
 
-- **Upload any CSV** — Walmart's or your bank's export. Column names don't have
-  to match anything.
-- **Automatic column mapping** with manual override, remembered for next time.
-- **Line-item grouping** — multiple rows sharing one check number are combined
-  into a single deposit (gross and fees summed).
-- **Money parsing** that understands `$1,234.56`, `(50.00)`, trailing-minus,
-  and blank cells.
-- **Pre-post review** with totals, per-check validation, and a warning when
-  gross − fees doesn't equal net.
-- **Duplicate protection** — a local ledger remembers posted check numbers so
-  you never enter the same check twice.
-- **Secure QuickBooks connection** via Intuit's official OAuth 2.0, with
-  automatic token refresh. Sandbox and production supported.
+| | |
+|---|--:|
+| Receive Payment → Undeposited Funds | **$3,439.67** (5 invoices) |
+| Bank Deposit → American National | **$3,173.47** |
+| …of which disputed → Disputed AR | −$266.20 |
+
+Deposit ties to the ACH to the penny.
 
 ---
 
 ## Setup
 
-### 1. Create an Intuit app (one time)
+### 1. Intuit app (one time)
+Create an app at <https://developer.intuit.com> with the **Accounting** scope.
+Copy the Client ID / Secret and add redirect URI `http://localhost:3000/auth/callback`.
 
-1. Sign in at <https://developer.intuit.com> and create an app with the
-   **Accounting** scope.
-2. On **Keys & credentials**, copy the **Client ID** and **Client Secret**
-   (use the *Development* keys for the sandbox, *Production* keys when live).
-3. Under **Redirect URIs**, add exactly:
-   `http://localhost:3000/auth/callback`
-
-### 2. Configure and run
-
+### 2. Run
 ```bash
 npm install
-cp .env.example .env      # then fill in QBO_CLIENT_ID / QBO_CLIENT_SECRET
-npm start
+cp .env.example .env      # add QBO_CLIENT_ID / QBO_CLIENT_SECRET
+npm start                 # http://localhost:3000
 ```
+Click **Connect QuickBooks** and pick your company. **Use a sandbox company for
+the first runs.**
 
-Open <http://localhost:3000>, click **Connect QuickBooks**, and approve the
-company. That's it.
-
-### 3. Import checks
-
-1. **Upload** the Walmart spreadsheet (try `sample-data/walmart-checks-sample.csv`).
-2. **Match your columns** — the app pre-fills its best guess.
-3. **Choose accounts** — bank, income, and (optional) fee account, pulled live
-   from your QuickBooks chart of accounts.
-4. **Review & post** — untick anything you want to skip, then post.
+### 3. Import a check
+Upload the Walmart `.xls/.xlsx` → classify any new codes → review the two
+transactions → **Preview payloads** (dry run) or **Post to QuickBooks**.
 
 ---
 
-## Configuration (`.env`)
+## Account routing (yours)
 
-| Variable | Meaning |
-| --- | --- |
-| `QBO_CLIENT_ID` / `QBO_CLIENT_SECRET` | Your Intuit app keys |
-| `QBO_ENVIRONMENT` | `sandbox` (default) or `production` |
-| `QBO_REDIRECT_URI` | Must match a Redirect URI on your Intuit app |
-| `PORT` | Web server port (default `3000`) |
-| `SESSION_SECRET` | Random string used to sign the session cookie |
+| Bucket | Account |
+|---|---|
+| Bank (ACH lands) | American National |
+| Undeposited Funds | Undeposited Funds |
+| Discounts + accepted deductions | Merchant Deposit Fees `#60410` |
+| Disputed deductions + repayments | Disputed AR |
+| Advertising fees | Marketing `#60120` |
+| Compliance fees | Walmart Compliance `#42500` |
+
+All of this lives in `server/defaultAccounts.js` and is overridable in the app.
 
 ---
 
@@ -94,32 +82,31 @@ company. That's it.
 
 ```
 server/
-  index.js       Express app + REST API (/api/*, /auth/*)
-  config.js      env + validation
-  quickbooks.js  OAuth flow, token refresh, QBO API calls
-  csvParser.js   CSV parse, column guessing, normalize + grouping
-  deposit.js     builds a balanced QBO Deposit payload
-  store.js       file-backed tokens / settings / posted-check ledger
-public/          browser wizard (HTML/CSS/JS, no build step)
-sample-data/     example Walmart CSV
-test/            unit tests (node --test)
+  index.js          Express app + API (/api/analyze, /api/post, auth, config)
+  walmartFile.js    read the Walmart .xls/.xlsx/.csv into normalized rows
+  allocator.js      decode each line -> Receive Payment + Bank Deposit plan
+  qboPost.js        build + post the CreditMemo / Payment / Deposit (dry-run-able)
+  quickbooks.js     OAuth, token refresh, QBO API + account/invoice resolvers
+  defaultDecoder.js seed deduction-code map
+  defaultAccounts.js account routing
+  store.js          file-backed tokens / decoder / accounts / posted ledger
+public/             upload + review UI (no build step)
+test/               unit tests (node --test) — 26 passing
 ```
 
-Run the tests with `npm test`.
+Run tests: `npm test`
 
 ---
 
-## Data & security notes
+## Status & safety
 
-- Tokens, saved settings, and the posted-check ledger live in a local `data/`
-  folder (git-ignored). Nothing is sent anywhere except QuickBooks.
-- This is a single-tenant local tool. Before hosting it for multiple users
-  you'd want real per-user auth and encrypted token storage.
-
----
-
-## Roadmap ideas
-
-- Apply checks as **payments against open invoices** (in addition to deposits).
-- Read **PDF remittance** stubs and **email** notifications, not just CSV.
-- Export a reconciliation report of everything posted.
+- **Allocation + file reading + payload building are complete and unit-tested**
+  against the real check.
+- **The live QuickBooks posting has not yet been run against a real company** —
+  validate it on a **sandbox** first. Posting is dry-run unless you explicitly
+  confirm, refuses to post unclassified codes or an unbalanced deposit, and
+  guards against posting the same check twice.
+- The write-off (discount + accepted deductions) uses a per-invoice credit memo
+  to close the invoice; confirm it books the way you expect in the sandbox
+  before going live.
+- Tokens and data stay local (git-ignored `data/`).
