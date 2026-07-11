@@ -126,6 +126,8 @@ async function apiRequest(pathAndQuery, { method = 'GET', body } = {}) {
     clearTimeout(timer);
   }
 
+  // Capture intuit_tid — the request id Intuit support uses to trace issues.
+  const tid = res.headers.get('intuit_tid') || null;
   const text = await res.text();
   let json;
   try {
@@ -136,12 +138,13 @@ async function apiRequest(pathAndQuery, { method = 'GET', body } = {}) {
 
   if (!res.ok) {
     const fault = json && json.Fault && json.Fault.Error && json.Fault.Error[0];
-    const message = fault
+    const base = fault
       ? `${fault.Message}${fault.Detail ? ' — ' + fault.Detail : ''}`
       : `QuickBooks API error (HTTP ${res.status})`;
-    const error = new Error(message);
+    const error = new Error(tid ? `${base} [Intuit tid: ${tid}]` : base);
     error.status = res.status;
     error.body = json;
+    error.intuit_tid = tid;
     throw error;
   }
   return json;

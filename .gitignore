@@ -3,6 +3,7 @@ node_modules/
 data/tokens.json
 data/ledger.json
 data/mappings.json
+data/errors.log
 uploads/
 *.log
 .DS_Store

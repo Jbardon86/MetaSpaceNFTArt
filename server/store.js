@@ -33,6 +33,18 @@ function writeJson(name, value) {
   fs.writeFileSync(filePath(name), JSON.stringify(value, null, 2), 'utf8');
 }
 
+// --- Error log (persistent, shareable for troubleshooting) -----------------
+
+function logError(entry) {
+  ensureDir();
+  const line = JSON.stringify({ at: new Date().toISOString(), ...entry }) + '\n';
+  try {
+    fs.appendFileSync(filePath('errors.log'), line);
+  } catch (_) {
+    /* logging must never crash the request */
+  }
+}
+
 // --- QuickBooks tokens -----------------------------------------------------
 
 function getTokens() {
@@ -119,6 +131,7 @@ function isAlreadyPosted(reference) {
 
 module.exports = {
   DATA_DIR,
+  logError,
   getTokens,
   saveTokens,
   clearTokens,

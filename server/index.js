@@ -33,6 +33,15 @@ function wrap(handler) {
     Promise.resolve(handler(req, res)).catch((err) => {
       // eslint-disable-next-line no-console
       console.error(err);
+      // Persist for troubleshooting (includes Intuit's tid when present).
+      store.logError({
+        path: req.path,
+        message: err.message,
+        code: err.code,
+        status: err.status,
+        intuit_tid: err.intuit_tid,
+        stack: err.stack,
+      });
       res
         .status(err.status && err.status < 600 ? err.status : 500)
         .json({ error: err.message || 'Unexpected error', code: err.code, detail: err.body });
