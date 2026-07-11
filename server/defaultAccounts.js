@@ -8,7 +8,7 @@
 
 module.exports = {
   // Where the Walmart ACH deposit lands.
-  bank: 'American National',
+  bank: 'American National Bank',
 
   // Standard middle step: payments post here, then the deposit sweeps them.
   undepositedFunds: 'Undeposited Funds',
