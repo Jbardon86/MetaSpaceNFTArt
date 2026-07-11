@@ -58,7 +58,7 @@ test('buildDeposit sweeps the payment and adds adjustment lines', () => {
     adjustments: [{ accountId: '80', amount: -266.20, description: 'Disputed' }],
   });
   assert.strictEqual(payload.DepositToAccountRef.value, '35');
-  assert.strictEqual(payload.Line[0].DepositLineDetail.LinkedTxn[0].TxnId, '500');
+  assert.strictEqual(payload.Line[0].LinkedTxn[0].TxnId, '500');
   assert.strictEqual(payload.Line[1].DepositLineDetail.AccountRef.value, '80');
   assert.strictEqual(total, 3173.47);
 });

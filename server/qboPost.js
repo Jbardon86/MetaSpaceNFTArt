@@ -97,10 +97,10 @@ function buildDeposit(resolved) {
       Amount: round2(resolved.undepositedTotal),
       DetailType: 'DepositLineDetail',
       Description: `Walmart check ${resolved.checkNumber} payment`,
-      DepositLineDetail: {
-        // linking the payment tells QBO this deposit clears that UF payment
-        LinkedTxn: [{ TxnId: String(resolved.paymentId), TxnType: 'Payment' }],
-      },
+      // linking the payment (at the line level, per the QBO schema) tells QBO
+      // this deposit clears that Undeposited Funds payment
+      LinkedTxn: [{ TxnId: String(resolved.paymentId), TxnType: 'Payment' }],
+      DepositLineDetail: {},
     });
   }
 

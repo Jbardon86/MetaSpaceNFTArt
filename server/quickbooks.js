@@ -99,15 +99,32 @@ async function apiRequest(pathAndQuery, { method = 'GET', body } = {}) {
     `${config.qbo.apiBaseUrl}/v3/company/${tokens.realmId}${pathAndQuery}` +
     `${sep}minorversion=${config.qbo.minorVersion}`;
 
-  const res = await fetch(url, {
-    method,
-    headers: {
-      Authorization: `Bearer ${tokens.access_token}`,
-      Accept: 'application/json',
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  // Never hang forever on a stuck call — abort after 25s so it surfaces as a
+  // clear error instead of freezing the whole post.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 25000);
+  let res;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: {
+        Authorization: `Bearer ${tokens.access_token}`,
+        Accept: 'application/json',
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      const e = new Error(`QuickBooks did not respond within 25s for ${method} ${pathAndQuery}.`);
+      e.status = 504;
+      throw e;
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 
   const text = await res.text();
   let json;
