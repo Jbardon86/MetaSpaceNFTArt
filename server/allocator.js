@@ -205,6 +205,8 @@ function allocateCheck(rows, decoder, accounts = {}, meta = {}) {
     receivePayment: {
       total: undepositedTotal,
       depositToAccount: accounts.undepositedFunds || 'Undeposited Funds',
+      // discounts + accepted deductions are written off here, per invoice
+      writeOffAccount: accounts.paymentWriteOff || 'Merchant Deposit Fees',
       invoices: paymentInvoices,
     },
     bankDeposit: {
