@@ -50,13 +50,20 @@ async function ensureInvoice(qbo, { docNumber, amount, customerId, itemId, txnDa
   return { id: json.Invoice.Id, docNumber, created: true };
 }
 
-// The invoices on check 004041349 that carry a payment.
+// The invoices that carry a payment across the sample checks (004041349 and
+// the second demo check 004041350). Seeded so end-to-end posting can be tested.
 const CHECK_INVOICES = [
+  // check 004041349
   { docNumber: '46364', amount: 756.04 },
   { docNumber: '46367', amount: 785.03 },
   { docNumber: '46391', amount: 545.13 },
   { docNumber: '46408', amount: 766.18 },
   { docNumber: '46412', amount: 664.73 },
+  // check 004041350 (second demo)
+  { docNumber: '50001', amount: 900.00 },
+  { docNumber: '50002', amount: 640.00 },
+  { docNumber: '50003', amount: 1200.00 },
+  { docNumber: '50004', amount: 430.00 },
 ];
 
 async function seedSandbox(qbo, { txnDate = '2026-05-15' } = {}) {
