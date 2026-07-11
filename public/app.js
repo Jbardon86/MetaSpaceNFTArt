@@ -26,6 +26,12 @@ function money(n) {
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+function fmtDate(iso) {
+  const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return iso || '—';
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${months[+m[2] - 1]} ${+m[3]}, ${m[1]}`;
+}
 function show(id) { $(id).classList.remove('hidden'); }
 function hide(id) { $(id).classList.add('hidden'); }
 function tile(k, v, cls) { return `<div class="tile ${cls || ''}"><div class="k">${k}</div><div class="v">${v}</div></div>`; }
@@ -97,31 +103,36 @@ function render(data) {
   }
 
   // header + reconciliation
-  const posted = data.alreadyPosted ? '<span class="pill dup">already posted</span>' : '';
-  $('reviewHeader').innerHTML = `<p><strong>Check ${esc(data.checkNumber || '—')}</strong> &nbsp;·&nbsp; paid ${esc(data.datePaid || '—')} ${posted}</p>`;
+  const posted = data.alreadyPosted ? ' <span class="pill dup">already posted</span>' : '';
+  $('reviewHeader').innerHTML =
+    `<h1>Check ${esc(data.checkNumber || '—')}</h1>` +
+    `<p class="sub">Paid ${esc(fmtDate(data.datePaid))} · ${plan.receivePayment.invoices.length} invoices${posted}</p>`;
 
   const r = plan.reconciliation;
   $('reconcile').innerHTML =
     tile('Remittance net', money(r.remittanceNet)) +
     tile('Bank deposit', money(r.depositTotal), 'good') +
-    tile('Balanced', r.balanced ? '✓' : '✗', r.balanced ? 'good' : 'bad');
+    tile('Balanced', r.balanced ? 'Yes' : 'No', r.balanced ? 'good' : 'bad');
 
-  // Receive Payment
-  $('rpDest').textContent = `→ ${plan.receivePayment.depositToAccount} · write-offs to ${plan.receivePayment.writeOffAccount}`;
+  // Receive Payment (invoices paid in full)
+  $('rpDest').textContent = `into ${plan.receivePayment.depositToAccount} · paid in full`;
   const pt = $('paymentTable').querySelector('tbody');
   pt.innerHTML = plan.receivePayment.invoices.map((i) =>
-    `<tr><td>${esc(i.invoice)}</td><td class="num">${money(i.invoiceAmount)}</td><td class="num">${money(i.writeOff)}</td><td class="num">${money(i.appliedToUndepositedFunds)}</td></tr>`
+    `<tr><td>${esc(i.invoice)}</td><td class="num">${money(i.invoiceAmount)}</td><td class="num">${money(i.appliedToUndepositedFunds)}</td></tr>`
   ).join('') +
-    `<tr class="totalrow"><td>Total</td><td></td><td></td><td class="num">${money(plan.receivePayment.total)}</td></tr>`;
+    `<tr class="total"><td>Total</td><td></td><td class="num">${money(plan.receivePayment.total)}</td></tr>`;
 
   // Bank Deposit
-  $('depDest').textContent = `→ ${plan.bankDeposit.depositToAccount}`;
+  $('depDest').textContent = `into ${plan.bankDeposit.depositToAccount}`;
   const dt = $('depositTable').querySelector('tbody');
   dt.innerHTML = plan.bankDeposit.lines.map((l) => {
     const cls = l.amount < 0 ? 'neg' : '';
-    return `<tr><td>${esc(l.description)}</td><td>${esc(l.account || '')}</td><td class="num ${cls}">${money(l.amount)}</td></tr>`;
+    let desc = esc(l.description);
+    let pill = '';
+    if (l.type === 'disputed-deduction') { pill = '<span class="pill dispute">Dispute</span> '; desc = desc.replace(/^Disputed:\s*/, ''); }
+    return `<tr><td>${pill}${desc}</td><td class="acct">${esc(l.account || '')}</td><td class="num ${cls}">${money(l.amount)}</td></tr>`;
   }).join('') +
-    `<tr class="totalrow"><td>Deposit total</td><td></td><td class="num">${money(plan.bankDeposit.total)}</td></tr>`;
+    `<tr class="total"><td>Deposit total</td><td></td><td class="num">${money(plan.bankDeposit.total)}</td></tr>`;
 
   // connection-dependent review notes
   const rw = $('reviewWarnings');

@@ -3,23 +3,22 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>WalmartCheck → QuickBooks Online</title>
+    <title>WalmartCheck → QuickBooks</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <header class="topbar">
+    <header class="bar">
       <div class="brand">
-        <span class="logo">✓</span>
-        <div>
-          <div class="brand-title">WalmartCheck → QuickBooks</div>
-          <div class="brand-sub">Read the remittance, post the payment + deposit</div>
+        <span class="mark">✓</span>
+        <div class="brand-text">
+          <b>WalmartCheck</b>
+          <span>Remittance → QuickBooks</span>
         </div>
       </div>
       <div class="connection">
-        <span class="status-dot" id="statusDot"></span>
-        <span id="connectionText">Checking…</span>
-        <button id="connectBtn" class="btn small hidden">Connect QuickBooks</button>
-        <button id="disconnectBtn" class="btn small ghost hidden">Disconnect</button>
+        <span class="status"><span class="status-dot" id="statusDot"></span><span id="connectionText">Checking…</span></span>
+        <button id="connectBtn" class="btn primary small hidden">Connect QuickBooks</button>
+        <button id="disconnectBtn" class="btn ghost small hidden">Disconnect</button>
       </div>
     </header>
 
@@ -33,62 +32,69 @@
 
       <!-- Upload -->
       <section class="card step" id="step-upload">
-        <div class="step-head"><span class="num">1</span><h2>Upload the Walmart remittance</h2></div>
-        <p class="muted">Drop the <strong>.xls / .xlsx</strong> file Walmart sends (or a CSV of it).
-          The tool reads the codes, splits it into a Receive Payment and a Bank Deposit, and shows
-          you both before anything posts.</p>
+        <div class="eyebrow">Import</div>
+        <h1>Upload the Walmart remittance</h1>
+        <p class="sub">Drop the <b>.xls / .xlsx</b> file Walmart sends (or a CSV of it). The tool reads the
+          codes, splits it into a Receive Payment and a Bank Deposit, and shows you both before anything posts.</p>
         <div id="dropzone" class="dropzone">
           <input type="file" id="fileInput" accept=".csv,.xls,.xlsx" hidden />
           <div class="dz-inner">
-            <div class="dz-icon">⬆</div>
-            <div><strong>Choose a file</strong> or drag it here</div>
-            <div class="muted small" id="fileName"></div>
+            <div class="dz-icon">↑</div>
+            <div><b>Choose a file</b> or drag it here</div>
+            <div class="sub small" id="fileName"></div>
           </div>
         </div>
       </section>
 
       <!-- Unclassified codes -->
       <section class="card step hidden" id="step-unclassified">
-        <div class="step-head"><span class="num">!</span><h2>New deduction codes to classify</h2></div>
-        <p class="muted">These codes aren't in your decoder yet. Tell the tool where each goes, then
-          it will re-check. Nothing posts until every code is classified.</p>
+        <div class="eyebrow">Action needed</div>
+        <h1>New deduction codes to classify</h1>
+        <p class="sub">These codes aren't in your decoder yet. Tell the tool where each goes, then it
+          re-checks. Nothing posts until every code is classified.</p>
         <div id="unclassifiedList"></div>
       </section>
 
       <!-- Review -->
       <section class="card step hidden" id="step-review">
-        <div class="step-head"><span class="num">2</span><h2>Review</h2></div>
+        <div class="eyebrow">Review</div>
         <div id="reviewHeader"></div>
-        <div id="reconcile" class="totals"></div>
+        <div id="reconcile" class="tiles"></div>
 
-        <h3 class="sec">Transaction 1 — Receive Payment <span class="muted small" id="rpDest"></span></h3>
-        <div class="table-wrap">
-          <table id="paymentTable">
-            <thead><tr><th>Invoice</th><th class="num">Billed</th><th class="num">Discount + accepted</th><th class="num">→ Undeposited Funds</th></tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
+        <div class="txns">
+          <div class="txn">
+            <div class="txn-head"><h2>Receive Payment</h2><span class="to" id="rpDest"></span></div>
+            <div class="tbl-wrap">
+              <table id="paymentTable">
+                <thead><tr><th>Invoice</th><th class="num">Billed</th><th class="num">To Undeposited Funds</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
 
-        <h3 class="sec">Transaction 2 — Bank Deposit <span class="muted small" id="depDest"></span></h3>
-        <div class="table-wrap">
-          <table id="depositTable">
-            <thead><tr><th>Line</th><th>Account</th><th class="num">Amount</th></tr></thead>
-            <tbody></tbody>
-          </table>
+          <div class="txn">
+            <div class="txn-head"><h2>Bank Deposit</h2><span class="to" id="depDest"></span></div>
+            <div class="tbl-wrap">
+              <table id="depositTable">
+                <thead><tr><th>Line</th><th>Account</th><th class="num">Amount</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
         <div id="reviewWarnings"></div>
 
         <div class="actions">
-          <button class="btn ghost" id="dryRunBtn">Preview QuickBooks payloads</button>
-          <button class="btn" id="postBtn" disabled>Post to QuickBooks</button>
-          <span id="postHint" class="muted small"></span>
+          <button class="btn primary" id="postBtn" disabled>Post to QuickBooks</button>
+          <button class="btn ghost" id="dryRunBtn">Preview</button>
+          <span id="postHint" class="hint"></span>
         </div>
       </section>
 
       <!-- Results -->
       <section class="card step hidden" id="step-results">
-        <div class="step-head"><span class="num">✓</span><h2>Result</h2></div>
+        <div class="eyebrow">Result</div>
         <div id="resultsBody"></div>
         <div class="actions"><button class="btn ghost" id="startOverBtn">Import another check</button></div>
       </section>
