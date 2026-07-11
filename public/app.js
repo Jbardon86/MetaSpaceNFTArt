@@ -48,6 +48,7 @@ async function refreshStatus() {
     w.innerHTML = '⚠ QuickBooks app not configured: ' + s.configProblems.join(', ') +
       '. Copy <code>.env.example</code> to <code>.env</code>, add your Intuit keys, restart.';
   }
+  if (s.authRequired) $('logoutBtn').classList.remove('hidden');
   if (s.connected) {
     dot.className = 'status-dot ok';
     $('connectionText').textContent = `${(s.company && s.company.name) || 'Connected'} · ${s.environment}`;
@@ -296,6 +297,7 @@ $('disconnectBtn').addEventListener('click', async () => { await api('/api/disco
 $('dryRunBtn').addEventListener('click', () => doPost(true));
 $('postBtn').addEventListener('click', () => { if (confirm('Post this Receive Payment and Bank Deposit to QuickBooks?')) doPost(false); });
 $('startOverBtn').addEventListener('click', () => location.reload());
+$('logoutBtn').addEventListener('click', async () => { await fetch('/logout', { method: 'POST' }).catch(() => {}); location.href = '/login'; });
 $('setupSandboxBtn').addEventListener('click', async () => {
   const btn = $('setupSandboxBtn');
   btn.disabled = true; btn.textContent = 'Setting up…';

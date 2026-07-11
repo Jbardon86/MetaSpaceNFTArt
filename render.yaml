@@ -1,0 +1,34 @@
+# Render.com blueprint. In Render: New + → Blueprint → pick this repo.
+# Then set the secret env vars (marked sync:false) in the dashboard.
+services:
+  - type: web
+    name: walmartcheck
+    runtime: node
+    plan: starter            # required for a persistent disk (data survives restarts)
+    branch: claude/quickbooks-check-entry-3ze2wy
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: data
+      mountPath: /var/data   # matches DATA_DIR below
+      sizeGB: 1
+    envVars:
+      - key: DATA_DIR
+        value: /var/data
+      - key: QBO_ENVIRONMENT
+        value: production
+      - key: SECURE_COOKIES
+        value: "true"
+      # --- secrets: set these in the Render dashboard (never commit them) ---
+      - key: QBO_CLIENT_ID
+        sync: false
+      - key: QBO_CLIENT_SECRET
+        sync: false
+      - key: SESSION_SECRET
+        sync: false          # a long random string
+      - key: APP_PASSWORD
+        sync: false          # the team password to open the app
+      - key: QBO_REDIRECT_URI
+        sync: false          # https://<your-app>.onrender.com/auth/callback

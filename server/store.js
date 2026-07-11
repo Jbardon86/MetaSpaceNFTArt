@@ -9,7 +9,9 @@ const path = require('path');
 const defaultDecoder = require('./defaultDecoder');
 const defaultAccounts = require('./defaultAccounts');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
+// Where persisted files live. Override with DATA_DIR when hosted so it points
+// at a persistent disk (Render, etc.) that survives restarts/redeploys.
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 
 function ensureDir() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });

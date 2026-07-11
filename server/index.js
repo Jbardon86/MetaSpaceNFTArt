@@ -17,15 +17,90 @@ const { seedSandbox } = require('./seedSandbox');
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
+// When hosted behind a TLS-terminating proxy (Render, etc.), trust it so
+// secure cookies work and req.protocol is correct.
+const secureCookies = process.env.SECURE_COOKIES === 'true' || !!process.env.RENDER;
+if (secureCookies) app.set('trust proxy', 1);
+
 app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ extended: false }));
 app.use(
   session({
     secret: config.sessionSecret,
     resave: false,
     saveUninitialized: true,
-    cookie: { httpOnly: true, sameSite: 'lax' },
+    cookie: { httpOnly: true, sameSite: 'lax', secure: secureCookies },
   })
 );
+
+// --- Password gate (only active when APP_PASSWORD is set, i.e. when hosted) --
+const APP_PASSWORD = process.env.APP_PASSWORD || '';
+
+function loginPage(message) {
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in — WalmartCheck</title>
+  <style>
+    :root{color-scheme:light dark}
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f5f5f7;
+      font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif;color:#1d1d1f}
+    @media(prefers-color-scheme:dark){body{background:#000;color:#f5f5f7}}
+    .card{background:#fff;border-radius:20px;box-shadow:0 10px 40px rgba(0,0,0,.1);padding:34px;width:min(360px,92vw);text-align:center}
+    @media(prefers-color-scheme:dark){.card{background:#1c1c1e}}
+    .mark{width:44px;height:44px;border-radius:11px;background:linear-gradient(180deg,#2ca01c,#1f8817);
+      display:grid;place-items:center;color:#fff;font-weight:600;font-size:24px;margin:0 auto 16px}
+    h1{font-size:20px;font-weight:600;letter-spacing:-.02em;margin:0 0 4px}
+    p{color:#6e6e73;font-size:14px;margin:0 0 22px}
+    input{width:100%;box-sizing:border-box;padding:11px 13px;font-size:15px;border-radius:11px;
+      border:1px solid rgba(0,0,0,.15);background:transparent;color:inherit;margin-bottom:12px}
+    @media(prefers-color-scheme:dark){input{border-color:rgba(255,255,255,.2)}}
+    button{width:100%;padding:11px;font-size:15px;font-weight:500;border:none;border-radius:11px;background:#0071e3;color:#fff;cursor:pointer}
+    .err{color:#d70015;font-size:13px;margin-bottom:12px}
+  </style>
+  <form class="card" method="post" action="/login">
+    <div class="mark">✓</div>
+    <h1>WalmartCheck</h1>
+    <p>Enter the team password to continue.</p>
+    ${message ? `<div class="err">${message}</div>` : ''}
+    <input type="password" name="password" placeholder="Password" autofocus autocomplete="current-password" />
+    <button type="submit">Sign in</button>
+  </form>`;
+}
+
+app.get('/health', (req, res) => res.json({ ok: true }));
+
+app.get('/login', (req, res) => {
+  if (!APP_PASSWORD || (req.session && req.session.authed)) return res.redirect('/');
+  res.send(loginPage(''));
+});
+app.post('/login', (req, res) => {
+  if (!APP_PASSWORD) return res.redirect('/');
+  const supplied = (req.body && req.body.password) || '';
+  // constant-time compare to avoid leaking the password length/content via timing
+  const ok =
+    supplied.length === APP_PASSWORD.length &&
+    crypto.timingSafeEqual(Buffer.from(supplied), Buffer.from(APP_PASSWORD));
+  if (ok) {
+    req.session.authed = true;
+    return res.redirect('/');
+  }
+  res.status(401).send(loginPage('Incorrect password. Try again.'));
+});
+app.post('/logout', (req, res) => {
+  if (req.session) req.session.authed = false;
+  res.json({ ok: true });
+});
+
+app.use((req, res, next) => {
+  if (!APP_PASSWORD) return next(); // no password configured (local use) -> open
+  if (req.session && req.session.authed) return next();
+  if (req.path === '/login' || req.path === '/health') return next();
+  if (req.path.startsWith('/api/')) {
+    return res.status(401).json({ error: 'Not signed in. Reload the page and enter the team password.' });
+  }
+  if (req.method === 'GET') return res.redirect('/login');
+  return res.status(401).json({ error: 'Not signed in.' });
+});
+
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 function wrap(handler) {
@@ -106,6 +181,7 @@ app.get(
       configProblems: configProblems(),
       accounts: store.getAccounts(),
       decoderCount: Object.keys(store.getDecoder()).length,
+      authRequired: Boolean(APP_PASSWORD),
     });
   })
 );
