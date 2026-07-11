@@ -18,8 +18,8 @@ const DATA = [
   ['9000000002','90002','6000','8000','5','222','2026-06-02',200.00,'2026-06-20',4.00,196.00,''],
   ['9000000003','90003','6000','8000','5','25','2026-06-03',-10.00,'2026-06-20',0,-10.00,'MERCHANDISE BILLED NOT SHIPPED [0022]'],
 ];
-// Expected: UF = (100-2-2) + (200-4) = 96 + 196 = 292
-//           deposit = 292 - 50 (disp 90002) - 10 (standalone 90003) = 232
+// Expected (invoices paid in full): UF = 100 + 200 = 300
+//           deposit = 300 - 8 (writeoff: disc+accept) - 50 (disp 90002) - 10 (90003) = 232
 //           remittance net = -2 +98 -50 +196 -10 = 232  -> balanced
 
 const DECODER = {
@@ -62,7 +62,7 @@ test('parsed xlsx flows through the allocator and balances', async () => {
   const buf = await buildXlsxBuffer('Check_000123456');
   const parsed = await parseRemittance(Buffer.from(buf), 'check_000123456.xlsx');
   const plan = allocateCheck(parsed.rows, DECODER, { deductionsBucket: 'Disputed AR' }, {});
-  assert.strictEqual(plan.receivePayment.total, 292);
+  assert.strictEqual(plan.receivePayment.total, 300);
   assert.strictEqual(plan.bankDeposit.total, 232);
   assert.strictEqual(plan.reconciliation.remittanceNet, 232);
   assert.ok(plan.reconciliation.balanced);

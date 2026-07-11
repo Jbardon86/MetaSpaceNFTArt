@@ -19,54 +19,22 @@
 const { round2 } = require('./allocator');
 
 /**
- * Build a CreditMemo that writes off `amount` for one invoice to the write-off
- * account (via a service item mapped to that account).
- */
-function buildCreditMemo({ customerId, writeOffItemId, amount, invoiceDoc, checkNumber, txnDate }) {
-  return {
-    CustomerRef: { value: String(customerId) },
-    TxnDate: txnDate,
-    PrivateNote: `Walmart check ${checkNumber}: discount + accepted deductions written off for invoice ${invoiceDoc}`,
-    Line: [
-      {
-        DetailType: 'SalesItemLineDetail',
-        Amount: round2(amount),
-        Description: `Early-pay discount + accepted deductions (inv ${invoiceDoc})`,
-        SalesItemLineDetail: { ItemRef: { value: String(writeOffItemId) } },
-      },
-    ],
-  };
-}
-
-/**
- * Build the Payment that closes the invoices into Undeposited Funds.
+ * Build the Payment that closes the invoices into Undeposited Funds. Each
+ * invoice is paid in full; there are no credit memos.
  *
  * @param resolved {
  *   customerId, undepositedFundsId, txnDate, checkNumber,
- *   invoices: [{ invoiceId, invoiceDoc, cash, creditMemoId?, writeOff }]
+ *   invoices: [{ invoiceId, invoiceDoc, cash }]
  * }
  */
 function buildPayment(resolved) {
-  const lines = [];
-  for (const inv of resolved.invoices) {
-    // cash applied to the invoice
-    if (inv.cash > 0) {
-      lines.push({
-        Amount: round2(inv.cash),
-        LinkedTxn: [{ TxnId: String(inv.invoiceId), TxnType: 'Invoice' }],
-      });
-    }
-    // credit memo applied to the same invoice to cover the write-off
-    if (inv.creditMemoId && inv.writeOff > 0) {
-      lines.push({
-        Amount: round2(inv.writeOff),
-        LinkedTxn: [
-          { TxnId: String(inv.invoiceId), TxnType: 'Invoice' },
-          { TxnId: String(inv.creditMemoId), TxnType: 'CreditMemo' },
-        ],
-      });
-    }
-  }
+  // Each invoice is paid in full. One line per invoice; no credit memos.
+  const lines = resolved.invoices
+    .filter((inv) => inv.cash > 0)
+    .map((inv) => ({
+      Amount: round2(inv.cash),
+      LinkedTxn: [{ TxnId: String(inv.invoiceId), TxnType: 'Invoice' }],
+    }));
 
   const cashTotal = round2(resolved.invoices.reduce((s, i) => s + (i.cash || 0), 0));
 
@@ -215,34 +183,8 @@ async function postPlan(plan, deps, opts = {}) {
     if (dryRun) bankId = `UNRESOLVED:${plan.bankDeposit.depositToAccount}`;
   }
 
-  // 1. Credit memos for write-offs.
-  const writeOffItemId = plan.receivePayment.invoices.some((i) => i.writeOff > 0)
-    ? (dryRun ? 'WRITEOFF_ITEM' : await deps.ensureWriteOffItemId())
-    : null;
-
-  const creditMemoPayloads = [];
-  for (const inv of resolvedInvoices) {
-    if (inv.writeOff > 0) {
-      const cm = buildCreditMemo({
-        customerId,
-        writeOffItemId,
-        amount: inv.writeOff,
-        invoiceDoc: inv.invoiceDoc,
-        checkNumber,
-        txnDate,
-      });
-      creditMemoPayloads.push({ invoiceDoc: inv.invoiceDoc, payload: cm });
-      if (!dryRun) {
-        const created = await deps.createCreditMemo(cm);
-        inv.creditMemoId = created.Id;
-      } else {
-        inv.creditMemoId = `CM_${inv.invoiceDoc}`;
-      }
-    }
-  }
-  report.payloads.creditMemos = creditMemoPayloads;
-
-  // 2. Payment.
+  // 1. Payment — invoices paid in full into Undeposited Funds (no credit memos;
+  // discounts + accepted deductions are booked on the deposit instead).
   const paymentPayload = buildPayment({
     customerId,
     undepositedFundsId,
@@ -258,8 +200,8 @@ async function postPlan(plan, deps, opts = {}) {
     report.steps.push({ type: 'payment', id: paymentId });
   }
 
-  // 3. Deposit.
-  const undepositedTotal = round2(resolvedInvoices.reduce((s, i) => s + i.cash + (i.writeOff || 0), 0));
+  // 2. Deposit — sweep the full Undeposited Funds payment, then the adjustment
+  // lines (write-off, disputes, fees, repayments) net it down to the ACH.
   const adjustments = resolveDepositAdjustments(plan, deps.accountIdFor, { lenient: dryRun, warnings: report.warnings });
   const deposit = buildDeposit({
     bankId,
@@ -288,7 +230,6 @@ async function postPlan(plan, deps, opts = {}) {
 }
 
 module.exports = {
-  buildCreditMemo,
   buildPayment,
   buildDeposit,
   resolveDepositAdjustments,

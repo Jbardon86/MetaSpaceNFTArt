@@ -135,13 +135,18 @@ function allocateCheck(rows, decoder, accounts = {}, meta = {}) {
   }
 
   // ---- Transaction 1: Receive Payment (into Undeposited Funds) ----
+  // Each invoice is paid IN FULL to Undeposited Funds. The early-pay discount
+  // and accepted deductions are NOT netted here — they come out on the deposit
+  // (below) as a write-off line. Same books, but the payment stays a simple,
+  // reliable full-amount application (no credit memos).
   const paymentInvoices = [];
   let undepositedTotal = 0;
+  let totalWriteOff = 0;
   for (const g of byInvoice.values()) {
     if (!g.hasPayment) continue; // e.g. a standalone chargeback invoice
     const writeOff = round2(g.discount + g.accepted);
-    const cashToUF = round2(g.invoiceAmount - writeOff);
-    undepositedTotal = round2(undepositedTotal + cashToUF);
+    totalWriteOff = round2(totalWriteOff + writeOff);
+    undepositedTotal = round2(undepositedTotal + g.invoiceAmount);
     paymentInvoices.push({
       invoice: g.invoice,
       po: g.po,
@@ -149,7 +154,7 @@ function allocateCheck(rows, decoder, accounts = {}, meta = {}) {
       discount: g.discount,
       acceptedDeductions: g.accepted,
       writeOff,
-      appliedToUndepositedFunds: cashToUF,
+      appliedToUndepositedFunds: g.invoiceAmount, // paid in full
     });
   }
 
@@ -161,6 +166,15 @@ function allocateCheck(rows, decoder, accounts = {}, meta = {}) {
       description: 'Walmart payment (from Undeposited Funds)',
       account: accounts.undepositedFunds || 'Undeposited Funds',
       amount: undepositedTotal,
+    });
+  }
+  // early-pay discounts + accepted deductions -> negative, to the write-off account
+  if (totalWriteOff > 0) {
+    depositLines.push({
+      type: 'writeoff',
+      description: `Early-pay discounts + accepted deductions (${paymentInvoices.length} invoices)`,
+      account: accounts.paymentWriteOff || 'Merchant Deposit Fees',
+      amount: round2(-totalWriteOff),
     });
   }
   // disputed deductions -> negative, to the bucket

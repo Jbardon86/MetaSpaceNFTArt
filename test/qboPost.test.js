@@ -3,7 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 const { allocateCheck } = require('../server/allocator');
-const { buildCreditMemo, buildPayment, buildDeposit, postPlan } = require('../server/qboPost');
+const { buildPayment, buildDeposit, postPlan } = require('../server/qboPost');
 
 const ROWS = [
   { po: 'a', invoice: '46364', invoiceAmount: 756.04, discount: 15.27, amountPaid: 740.77, deductionCode: '' },
@@ -21,31 +21,23 @@ function plan() {
   return allocateCheck(ROWS, DECODER, ACCOUNTS, { checkNumber: '004041349', datePaid: '2026-06-23' });
 }
 
-test('buildCreditMemo books the write-off to the write-off item', () => {
-  const cm = buildCreditMemo({ customerId: '7', writeOffItemId: '42', amount: 17.10, invoiceDoc: '46364', checkNumber: '004041349', txnDate: '2026-06-23' });
-  assert.strictEqual(cm.CustomerRef.value, '7');
-  assert.strictEqual(cm.Line[0].Amount, 17.10);
-  assert.strictEqual(cm.Line[0].SalesItemLineDetail.ItemRef.value, '42');
-});
-
-test('buildPayment applies cash + credit memo to each invoice, into Undeposited Funds', () => {
+test('buildPayment applies each invoice in full, one line per invoice, into Undeposited Funds', () => {
   const pay = buildPayment({
     customerId: '7',
     undepositedFundsId: '90',
     txnDate: '2026-06-23',
     checkNumber: '004041349',
     invoices: [
-      { invoiceId: '101', invoiceDoc: '46364', cash: 738.94, writeOff: 17.10, creditMemoId: '201' },
-      { invoiceId: '102', invoiceDoc: '46367', cash: 769.17, writeOff: 15.86, creditMemoId: '202' },
+      { invoiceId: '101', invoiceDoc: '46364', cash: 756.04 },
+      { invoiceId: '102', invoiceDoc: '46367', cash: 785.03 },
     ],
   });
   assert.strictEqual(pay.DepositToAccountRef.value, '90');
-  assert.strictEqual(pay.TotalAmt, 1508.11); // cash only: 738.94 + 769.17
-  // cash line + credit-memo line per invoice = 4 lines
-  assert.strictEqual(pay.Line.length, 4);
-  const cmLine = pay.Line.find((l) => l.LinkedTxn.some((t) => t.TxnType === 'CreditMemo' && t.TxnId === '201'));
-  assert.ok(cmLine, 'credit memo linked to its invoice');
-  assert.ok(cmLine.LinkedTxn.some((t) => t.TxnType === 'Invoice' && t.TxnId === '101'));
+  assert.strictEqual(pay.TotalAmt, 1541.07); // full invoice amounts
+  assert.strictEqual(pay.Line.length, 2); // one line per invoice, no credit memos
+  assert.strictEqual(pay.Line[0].Amount, 756.04);
+  assert.strictEqual(pay.Line[0].LinkedTxn[0].TxnType, 'Invoice');
+  assert.ok(pay.Line.every((l) => l.LinkedTxn.length === 1));
 });
 
 test('buildDeposit sweeps the payment and adds adjustment lines', () => {
@@ -64,7 +56,7 @@ test('buildDeposit sweeps the payment and adds adjustment lines', () => {
 });
 
 test('postPlan dry-run builds all payloads and ties out without posting', async () => {
-  const accountIds = { 'Undeposited Funds': '90', 'American National': '35', 'Disputed AR': '80' };
+  const accountIds = { 'Undeposited Funds': '90', 'American National': '35', 'Disputed AR': '80', 'Merchant Deposit Fees': '81' };
   let created = 0;
   const deps = {
     findCustomerId: async () => '7',
@@ -80,11 +72,11 @@ test('postPlan dry-run builds all payloads and ties out without posting', async 
   const report = await postPlan(plan(), deps, { dryRun: true });
   assert.strictEqual(created, 0, 'dry run must not create anything');
   assert.strictEqual(report.dryRun, true);
-  // this fixture is just 2 invoices: UF 1508.11 - disputed 218.96 = 1289.15
+  // 2 invoices paid in full (1541.07) - writeoff 32.96 - disputed 218.96 = 1289.15
+  assert.strictEqual(report.payloads.payment.TotalAmt, 1541.07);
   assert.strictEqual(report.depositTotal, 1289.15);
   assert.ok(report.balanced);
-  assert.strictEqual(report.payloads.creditMemos.length, 2); // both invoices have discount/accepted write-offs
-  assert.ok(report.payloads.payment.Line.length >= 2);
+  assert.strictEqual(report.payloads.payment.Line.length, 2);
   assert.strictEqual(report.warnings.length, 0);
 });
 

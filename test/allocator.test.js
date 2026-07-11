@@ -65,12 +65,18 @@ test('unknown code comes back unclassified (never silently posted)', () => {
 test('full allocation of check 004041349 ties out to the ACH', () => {
   const plan = allocateCheck(ROWS, DECODER, ACCOUNTS, { checkNumber: '004041349', datePaid: '2026-06-23' });
 
-  // Receive Payment -> Undeposited Funds
-  assert.strictEqual(plan.receivePayment.total, 3439.67);
+  // Receive Payment -> Undeposited Funds (invoices paid IN FULL)
+  assert.strictEqual(plan.receivePayment.total, 3517.11); // sum of the 5 invoice amounts
   assert.strictEqual(plan.receivePayment.invoices.length, 5); // 46595 has no payment
   const inv46364 = plan.receivePayment.invoices.find((i) => i.invoice === '46364');
-  assert.strictEqual(inv46364.appliedToUndepositedFunds, 738.94);
-  assert.strictEqual(inv46364.writeOff, 17.10); // 15.27 discount + 1.83 accepted
+  assert.strictEqual(inv46364.appliedToUndepositedFunds, 756.04); // full invoice
+  assert.strictEqual(inv46364.writeOff, 17.10); // 15.27 discount + 1.83 accepted (booked on deposit)
+
+  // Deposit carries the write-off as a line to the write-off account
+  const writeoffLine = plan.bankDeposit.lines.find((l) => l.type === 'writeoff');
+  assert.ok(writeoffLine, 'deposit has a write-off line');
+  assert.strictEqual(writeoffLine.amount, -77.44); // total discounts + accepted
+  assert.strictEqual(writeoffLine.account, 'Merchant Deposit Fees');
 
   // Bank Deposit
   assert.strictEqual(plan.bankDeposit.total, 3173.47);
