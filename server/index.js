@@ -136,7 +136,12 @@ async function buildPostDeps() {
     deps: {
       findCustomerId: (name) => qbo.findCustomerByName(name).then((c) => (c ? c.Id : null)),
       ensureCustomerId: (name) => qbo.ensureCustomer(name).then((c) => (c ? c.Id : null)),
-      findInvoiceId: (doc) => qbo.findInvoiceByDocNumber(doc).then((i) => (i ? i.Id : null)),
+      findInvoiceId: (doc) =>
+        qbo.findInvoiceByDocNumber(doc).then((i) =>
+          i
+            ? { id: i.Id, customerId: i.CustomerRef && i.CustomerRef.value, customerName: i.CustomerRef && i.CustomerRef.name }
+            : null
+        ),
       accountIdFor,
       ensureWriteOffItemId: () => qbo.ensureWriteOffItem(accountIdFor(accountsCfg.paymentWriteOff)),
       createCreditMemo: qbo.createCreditMemo,

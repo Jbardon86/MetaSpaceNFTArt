@@ -216,7 +216,7 @@ async function ensureCustomer(name) {
 async function findInvoiceByDocNumber(docNumber) {
   const safe = String(docNumber).replace(/'/g, "\\'");
   const qr = await query(
-    `SELECT Id, DocNumber, Balance, TotalAmt FROM Invoice WHERE DocNumber = '${safe}' MAXRESULTS 1`
+    `SELECT Id, DocNumber, CustomerRef, Balance, TotalAmt FROM Invoice WHERE DocNumber = '${safe}' MAXRESULTS 1`
   );
   return (qr.Invoice && qr.Invoice[0]) || null;
 }

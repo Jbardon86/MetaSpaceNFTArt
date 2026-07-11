@@ -144,23 +144,20 @@ async function postPlan(plan, deps, opts = {}) {
     throw e;
   }
 
-  // Resolve the Walmart customer.
-  const customerName = opts.customerName || 'Walmart';
-  let customerId = dryRun
-    ? await (deps.findCustomerId ? deps.findCustomerId(customerName) : null)
-    : await deps.ensureCustomerId(customerName);
-  if (!customerId) {
-    if (dryRun) customerId = `UNRESOLVED:${customerName}`;
-    else throw new Error(`Could not resolve the "${customerName}" customer.`);
-  }
-
-  // Match invoices; flag any that are missing.
+  // Match invoices; flag any that are missing. Capture the invoices' own
+  // customer so the payment is applied as that customer (findInvoiceId may
+  // return an object {id, customerId} or, in older/test fakes, a bare id).
   const resolvedInvoices = [];
+  let invoiceCustomer = null;
   for (const inv of plan.receivePayment.invoices) {
-    const invoiceId = await deps.findInvoiceId(inv.invoice);
-    if (!invoiceId) {
+    const found = await deps.findInvoiceId(inv.invoice);
+    if (!found) {
       report.warnings.push(`Invoice ${inv.invoice} not found in QuickBooks — it will be skipped.`);
       continue;
+    }
+    const invoiceId = typeof found === 'object' ? found.id : found;
+    if (typeof found === 'object' && found.customerId && !invoiceCustomer) {
+      invoiceCustomer = { id: found.customerId, name: found.customerName };
     }
     resolvedInvoices.push({
       invoiceId,
@@ -168,6 +165,23 @@ async function postPlan(plan, deps, opts = {}) {
       cash: round2(inv.appliedToUndepositedFunds),
       writeOff: round2(inv.writeOff),
     });
+  }
+
+  // The payment must be applied as the invoices' own customer. Only fall back
+  // to a name lookup / create when no invoice resolved (e.g. a check that is
+  // only standalone chargebacks).
+  let customerId;
+  if (invoiceCustomer && invoiceCustomer.id) {
+    customerId = invoiceCustomer.id;
+  } else {
+    const customerName = opts.customerName || 'Walmart';
+    customerId = dryRun
+      ? await (deps.findCustomerId ? deps.findCustomerId(customerName) : null)
+      : await deps.ensureCustomerId(customerName);
+    if (!customerId) {
+      if (dryRun) customerId = `UNRESOLVED:${customerName}`;
+      else throw new Error(`Could not resolve the "${customerName}" customer.`);
+    }
   }
 
   let undepositedFundsId = deps.accountIdFor(plan.receivePayment.depositToAccount);

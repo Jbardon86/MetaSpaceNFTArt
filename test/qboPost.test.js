@@ -80,6 +80,19 @@ test('postPlan dry-run builds all payloads and ties out without posting', async 
   assert.strictEqual(report.warnings.length, 0);
 });
 
+test('postPlan applies the payment as the invoices own customer', async () => {
+  const deps = {
+    findInvoiceId: async (doc) =>
+      ({ '46364': { id: '101', customerId: '42', customerName: 'Walmart Inc' },
+         '46367': { id: '102', customerId: '42', customerName: 'Walmart Inc' } }[doc] || null),
+    accountIdFor: (label) => ({ 'Undeposited Funds': '90', 'American National': '35', 'Disputed AR': '80', 'Merchant Deposit Fees': '81' }[label] || null),
+    // no findCustomerId/ensureCustomerId — must come from the invoice
+  };
+  const report = await postPlan(plan(), deps, { dryRun: true });
+  assert.strictEqual(report.payloads.payment.CustomerRef.value, '42');
+  assert.ok(!report.warnings.some((w) => /customer/i.test(w)));
+});
+
 test('postPlan flags a missing invoice instead of failing', async () => {
   const deps = {
     findCustomerId: async () => '7',
