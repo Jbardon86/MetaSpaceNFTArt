@@ -65,7 +65,15 @@ function classifyLine(row, decoder) {
     return { kind: 'repayment', code, category: 'repayment', description: rule.description };
   }
 
-  return { kind: 'deduction', code, category: rule.category, description: rule.description };
+  return {
+    kind: 'deduction',
+    code,
+    category: rule.category,
+    description: rule.description,
+    // for fee-category codes, which expense bucket to route to
+    // (e.g. 'advertising' | 'compliance'); ignored for other categories
+    feeAccount: rule.feeAccount,
+  };
 }
 
 /**
@@ -94,7 +102,7 @@ function allocateCheck(rows, decoder, accounts = {}, meta = {}) {
       continue;
     }
     if (c.category === 'fee') {
-      feeLines.push({ invoice, code: c.code, description: c.description, amount: round2(row.amountPaid) });
+      feeLines.push({ invoice, code: c.code, description: c.description, feeAccount: c.feeAccount, amount: round2(row.amountPaid) });
       continue;
     }
     if (c.category === 'repayment') {
@@ -173,7 +181,10 @@ function allocateCheck(rows, decoder, accounts = {}, meta = {}) {
   // fees -> negative, to expense
   for (const f of feeLines) {
     const acct =
-      (accounts.feeAccounts && (accounts.feeAccounts[f.code] || accounts.feeAccounts.default)) ||
+      (accounts.feeAccounts &&
+        (accounts.feeAccounts[f.feeAccount] ||
+          accounts.feeAccounts[f.code] ||
+          accounts.feeAccounts.default)) ||
       'Walmart Fees';
     depositLines.push({
       type: 'fee',

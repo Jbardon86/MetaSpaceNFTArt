@@ -24,9 +24,20 @@ module.exports = {
 
   // Walmart's own charges pulled off the check. These can't sit on an invoice,
   // so they ride the deposit to a real expense account (NOT Disputed AR).
-  // Codes map to accounts here; `default` catches anything unmapped.
-  // TODO: create/confirm these expense accounts in QBO, then set real names.
+  // A fee code's decoder entry names which bucket it belongs to; `default`
+  // catches anything unmapped.
   feeAccounts: {
-    default: 'Walmart Fees', // placeholder — split into Advertising / Compliance
+    advertising: 'Marketing',          // #60120
+    compliance: 'Walmart Compliance',  // #42500
+    default: 'Marketing',
+  },
+
+  // Known account numbers, so the posting layer can resolve a label to the
+  // right QBO account by AcctNum (more reliable than matching on name).
+  accountNumbers: {
+    'Merchant Deposit Fees': '60410',
+    Marketing: '60120',
+    'Walmart Compliance': '42500',
+    // 'American National' / 'Disputed AR' resolved by name when we read the CoA.
   },
 };

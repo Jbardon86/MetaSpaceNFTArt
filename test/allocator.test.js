@@ -35,6 +35,11 @@ const ACCOUNTS = {
   feeAccounts: { default: 'Walmart Fees' },
 };
 
+const ACCOUNTS_WITH_FEES = {
+  ...ACCOUNTS,
+  feeAccounts: { advertising: 'Marketing', compliance: 'Walmart Compliance', default: 'Marketing' },
+};
+
 test('extractCode pulls the bracketed code', () => {
   assert.strictEqual(extractCode('MERCHANDISE BILLED NOT SHIPPED [0022]'), '0022');
   assert.strictEqual(extractCode('PRICE DIFFERENCE AS DOCUMENTED [0100]'), '0100');
@@ -85,6 +90,28 @@ test('full allocation of check 004041349 ties out to the ACH', () => {
   // 46595 standalone chargeback: a dispute line exists, no payment invoice
   assert.ok(disputeLines.some((l) => l.invoice === '46595' && l.amount === -28.20));
   assert.ok(!plan.receivePayment.invoices.some((i) => i.invoice === '46595'));
+});
+
+test('fee codes route to their mapped expense account (advertising vs compliance)', () => {
+  const decoder = {
+    ...DECODER,
+    '0055': { description: 'Advertising Allowance', category: 'fee', feeAccount: 'advertising' },
+    '0077': { description: 'Compliance / OTIF Fine', category: 'fee', feeAccount: 'compliance' },
+  };
+  const rows = [
+    { po: '1', invoice: '', invoiceAmount: 0, discount: 0, amountPaid: -300.0, deductionCode: 'ADVERTISING ALLOWANCE [0055]' },
+    { po: '2', invoice: '', invoiceAmount: 0, discount: 0, amountPaid: -125.0, deductionCode: 'OTIF FINE [0077]' },
+    { po: '3', invoice: '5000', invoiceAmount: 1000, discount: 0, amountPaid: 1000, deductionCode: '' },
+  ];
+  const plan = allocateCheck(rows, decoder, ACCOUNTS_WITH_FEES, {});
+  const adv = plan.bankDeposit.lines.find((l) => l.code === '0055');
+  const comp = plan.bankDeposit.lines.find((l) => l.code === '0077');
+  assert.strictEqual(adv.account, 'Marketing');
+  assert.strictEqual(adv.amount, -300.0);
+  assert.strictEqual(comp.account, 'Walmart Compliance');
+  assert.strictEqual(comp.amount, -125.0);
+  // deposit = 1000 (UF) - 300 - 125 = 575
+  assert.strictEqual(plan.bankDeposit.total, 575.0);
 });
 
 test('repayments increase the deposit and clear Disputed AR', () => {
