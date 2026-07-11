@@ -62,11 +62,11 @@ function buildDeposit(resolved) {
   // sweep the payment out of Undeposited Funds
   if (resolved.undepositedTotal && resolved.paymentId) {
     // A line that links an existing (undeposited) payment carries ONLY the
-    // amount + LinkedTxn — no DetailType and no DepositLineDetail block, or QBO
-    // rejects it as "DepositLineDetail is missing".
+    // amount + LinkedTxn — no DetailType and no DepositLineDetail block. The
+    // LinkedTxn needs TxnLineId "0" (the payment as a whole).
     lines.push({
       Amount: round2(resolved.undepositedTotal),
-      LinkedTxn: [{ TxnId: String(resolved.paymentId), TxnType: 'Payment' }],
+      LinkedTxn: [{ TxnId: String(resolved.paymentId), TxnType: 'Payment', TxnLineId: '0' }],
     });
   }
 
