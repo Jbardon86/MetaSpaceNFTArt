@@ -46,10 +46,12 @@ async function refreshStatus() {
     dot.className = 'status-dot ok';
     $('connectionText').textContent = `${(s.company && s.company.name) || 'Connected'} · ${s.environment}`;
     hide('connectBtn'); show('disconnectBtn');
+    if (s.environment === 'sandbox') show('sandboxBar'); else hide('sandboxBar');
   } else {
     dot.className = 'status-dot off';
     $('connectionText').textContent = 'Not connected';
     show('connectBtn'); hide('disconnectBtn');
+    hide('sandboxBar');
   }
 }
 
@@ -229,6 +231,20 @@ $('disconnectBtn').addEventListener('click', async () => { await api('/api/disco
 $('dryRunBtn').addEventListener('click', () => doPost(true));
 $('postBtn').addEventListener('click', () => { if (confirm('Post this Receive Payment and Bank Deposit to QuickBooks?')) doPost(false); });
 $('startOverBtn').addEventListener('click', () => location.reload());
+$('setupSandboxBtn').addEventListener('click', async () => {
+  const btn = $('setupSandboxBtn');
+  btn.disabled = true; btn.textContent = 'Setting up…';
+  try {
+    const { report } = await api('/api/setup-sandbox', { method: 'POST' });
+    const invs = report.invoices.map((i) => i.docNumber).join(', ');
+    toast(`Sandbox ready: accounts + Walmart customer + invoices ${invs}. Re-checking…`);
+    if (state.lastAnalyze) { const data = await api('/api/reanalyze'); state.lastAnalyze = data; render(data); }
+  } catch (err) {
+    toast(err.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Set up sandbox test data';
+  }
+});
 
 setupDropzone();
 refreshStatus().catch((e) => toast(e.message, true));

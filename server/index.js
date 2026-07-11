@@ -11,6 +11,7 @@ const store = require('./store');
 const { parseRemittance } = require('./walmartFile');
 const { allocateCheck } = require('./allocator');
 const { postPlan } = require('./qboPost');
+const { seedSandbox } = require('./seedSandbox');
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
@@ -133,6 +134,20 @@ app.post('/api/config/decoder', wrap(async (req, res) => {
   if (!code || !entry || !entry.category) throw badRequest('code and entry.category are required');
   res.json({ ok: true, decoder: store.upsertCode(code, entry) });
 }));
+
+// Seed a SANDBOX company with the accounts/customer/invoices needed to test a
+// real post. Refuses to run against production.
+app.post(
+  '/api/setup-sandbox',
+  wrap(async (req, res) => {
+    if (!qbo.isConnected()) throw badRequest('Not connected to QuickBooks.');
+    if (config.qbo.environment !== 'sandbox') {
+      throw badRequest('Refusing to seed test data: this is not a sandbox company.');
+    }
+    const report = await seedSandbox(qbo, {});
+    res.json({ ok: true, report });
+  })
+);
 
 // --- Analyze (upload -> plan -> dry-run review) ----------------------------
 

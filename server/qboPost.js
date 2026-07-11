@@ -130,12 +130,17 @@ function buildDeposit(resolved) {
  * Map the allocation plan's deposit lines (which carry account *labels*) to
  * account *ids* using a label->id resolver.
  */
-function resolveDepositAdjustments(plan, accountIdFor) {
+function resolveDepositAdjustments(plan, accountIdFor, opts = {}) {
+  const { lenient = false, warnings = [] } = opts;
   return plan.bankDeposit.lines
     .filter((l) => l.type !== 'undeposited-funds')
     .map((l) => {
       const accountId = accountIdFor(l.account);
       if (!accountId) {
+        if (lenient) {
+          warnings.push(`No QuickBooks account found for "${l.account}" (needed for: ${l.description}).`);
+          return { accountId: `UNRESOLVED:${l.account}`, amount: round2(l.amount), description: l.description };
+        }
         const e = new Error(`No QuickBooks account found for "${l.account}" (needed for: ${l.description}).`);
         e.code = 'ACCOUNT_NOT_FOUND';
         throw e;
@@ -175,9 +180,13 @@ async function postPlan(plan, deps, opts = {}) {
 
   // Resolve the Walmart customer.
   const customerName = opts.customerName || 'Walmart';
-  const customerId = dryRun
+  let customerId = dryRun
     ? await (deps.findCustomerId ? deps.findCustomerId(customerName) : null)
     : await deps.ensureCustomerId(customerName);
+  if (!customerId) {
+    if (dryRun) customerId = `UNRESOLVED:${customerName}`;
+    else throw new Error(`Could not resolve the "${customerName}" customer.`);
+  }
 
   // Match invoices; flag any that are missing.
   const resolvedInvoices = [];
@@ -195,10 +204,16 @@ async function postPlan(plan, deps, opts = {}) {
     });
   }
 
-  const undepositedFundsId = deps.accountIdFor(plan.receivePayment.depositToAccount);
-  const bankId = deps.accountIdFor(plan.bankDeposit.depositToAccount);
-  if (!undepositedFundsId) report.warnings.push('Undeposited Funds account not resolved.');
-  if (!bankId) report.warnings.push(`Bank account "${plan.bankDeposit.depositToAccount}" not resolved.`);
+  let undepositedFundsId = deps.accountIdFor(plan.receivePayment.depositToAccount);
+  let bankId = deps.accountIdFor(plan.bankDeposit.depositToAccount);
+  if (!undepositedFundsId) {
+    report.warnings.push('Undeposited Funds account not resolved.');
+    if (dryRun) undepositedFundsId = 'UNRESOLVED:Undeposited Funds';
+  }
+  if (!bankId) {
+    report.warnings.push(`Bank account "${plan.bankDeposit.depositToAccount}" not resolved.`);
+    if (dryRun) bankId = `UNRESOLVED:${plan.bankDeposit.depositToAccount}`;
+  }
 
   // 1. Credit memos for write-offs.
   const writeOffItemId = plan.receivePayment.invoices.some((i) => i.writeOff > 0)
@@ -245,7 +260,7 @@ async function postPlan(plan, deps, opts = {}) {
 
   // 3. Deposit.
   const undepositedTotal = round2(resolvedInvoices.reduce((s, i) => s + i.cash + (i.writeOff || 0), 0));
-  const adjustments = resolveDepositAdjustments(plan, deps.accountIdFor);
+  const adjustments = resolveDepositAdjustments(plan, deps.accountIdFor, { lenient: dryRun, warnings: report.warnings });
   const deposit = buildDeposit({
     bankId,
     txnDate,
