@@ -8,14 +8,12 @@ const multer = require('multer');
 const { config, configProblems } = require('./config');
 const qbo = require('./quickbooks');
 const store = require('./store');
-const { parseCsv, guessMapping, normalizeChecks } = require('./csvParser');
-const { buildDeposit } = require('./deposit');
+const { parseRemittance } = require('./walmartFile');
+const { allocateCheck } = require('./allocator');
+const { postPlan } = require('./qboPost');
 
 const app = express();
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 15 * 1024 * 1024 }, // 15 MB
-});
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
 app.use(express.json({ limit: '20mb' }));
 app.use(
@@ -28,18 +26,50 @@ app.use(
 );
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// Small helper so route handlers can throw and get a clean JSON error.
 function wrap(handler) {
   return (req, res) => {
     Promise.resolve(handler(req, res)).catch((err) => {
       // eslint-disable-next-line no-console
       console.error(err);
-      res.status(err.status && err.status < 600 ? err.status : 500).json({
-        error: err.message || 'Unexpected error',
-        detail: err.body || undefined,
-      });
+      res
+        .status(err.status && err.status < 600 ? err.status : 500)
+        .json({ error: err.message || 'Unexpected error', code: err.code, detail: err.body });
     });
   };
+}
+
+/**
+ * Build the injected QuickBooks dependencies postPlan needs. Requires a live
+ * connection.
+ */
+async function buildPostDeps() {
+  const accountsCfg = store.getAccounts();
+  const accountIdFor = await qbo.buildAccountResolver(accountsCfg.accountNumbers || {});
+  return {
+    accountsCfg,
+    deps: {
+      findCustomerId: (name) => qbo.findCustomerByName(name).then((c) => (c ? c.Id : null)),
+      ensureCustomerId: (name) => qbo.ensureCustomer(name).then((c) => (c ? c.Id : null)),
+      findInvoiceId: (doc) => qbo.findInvoiceByDocNumber(doc).then((i) => (i ? i.Id : null)),
+      accountIdFor,
+      ensureWriteOffItemId: () => qbo.ensureWriteOffItem(accountIdFor(accountsCfg.paymentWriteOff)),
+      createCreditMemo: qbo.createCreditMemo,
+      createPayment: qbo.createPayment,
+      createDeposit: qbo.createDeposit,
+    },
+  };
+}
+
+function buildPlanFromSession(req) {
+  const rem = req.session.remittance;
+  if (!rem) {
+    const e = new Error('No remittance in this session. Please upload the Walmart file again.');
+    e.status = 400;
+    throw e;
+  }
+  const decoder = store.getDecoder();
+  const accounts = store.getAccounts();
+  return allocateCheck(rem.rows, decoder, accounts, { checkNumber: rem.checkNumber, datePaid: rem.datePaid });
 }
 
 // --- Status & auth ---------------------------------------------------------
@@ -47,7 +77,6 @@ function wrap(handler) {
 app.get(
   '/api/status',
   wrap(async (req, res) => {
-    const problems = configProblems();
     const connected = qbo.isConnected();
     let company = null;
     if (connected) {
@@ -55,7 +84,6 @@ app.get(
         const info = await qbo.getCompanyInfo();
         company = { name: info.CompanyName, id: info.Id };
       } catch (err) {
-        // Token might be stale/revoked — surface but stay usable.
         company = { error: err.message };
       }
     }
@@ -63,204 +91,144 @@ app.get(
       connected,
       company,
       environment: config.qbo.environment,
-      configProblems: problems,
-      settings: store.getSettings(),
+      configProblems: configProblems(),
+      accounts: store.getAccounts(),
+      decoderCount: Object.keys(store.getDecoder()).length,
     });
   })
 );
 
 app.get('/auth/connect', (req, res) => {
-  if (configProblems().length) {
-    return res
-      .status(400)
-      .send('QuickBooks app is not configured. See the README / .env.example.');
-  }
-  const url = qbo.getAuthorizeUrl('walmartcheck');
-  res.redirect(url);
+  if (configProblems().length) return res.status(400).send('QuickBooks app not configured. See README.');
+  res.redirect(qbo.getAuthorizeUrl('walmartcheck'));
 });
 
-app.get(
-  '/auth/callback',
-  wrap(async (req, res) => {
-    await qbo.handleCallback(req.originalUrl);
-    res.redirect('/?connected=1');
-  })
-);
+app.get('/auth/callback', wrap(async (req, res) => {
+  await qbo.handleCallback(req.originalUrl);
+  res.redirect('/?connected=1');
+}));
+
+app.post('/api/disconnect', wrap(async (req, res) => {
+  qbo.disconnect();
+  res.json({ ok: true });
+}));
+
+// --- Config: accounts + decoder -------------------------------------------
+
+app.get('/api/accounts', wrap(async (req, res) => {
+  res.json({ accounts: await qbo.listAccounts() });
+}));
+
+app.get('/api/config', wrap(async (req, res) => {
+  res.json({ accounts: store.getAccounts(), decoder: store.getDecoder() });
+}));
+
+app.post('/api/config/accounts', wrap(async (req, res) => {
+  store.saveAccounts({ ...store.getAccounts(), ...req.body });
+  res.json({ ok: true, accounts: store.getAccounts() });
+}));
+
+app.post('/api/config/decoder', wrap(async (req, res) => {
+  const { code, entry } = req.body || {};
+  if (!code || !entry || !entry.category) throw badRequest('code and entry.category are required');
+  res.json({ ok: true, decoder: store.upsertCode(code, entry) });
+}));
+
+// --- Analyze (upload -> plan -> dry-run review) ----------------------------
 
 app.post(
-  '/api/disconnect',
-  wrap(async (req, res) => {
-    qbo.disconnect();
-    res.json({ ok: true });
-  })
-);
-
-// --- Accounts & settings ---------------------------------------------------
-
-app.get(
-  '/api/accounts',
-  wrap(async (req, res) => {
-    const accounts = await qbo.listAccounts();
-    res.json({ accounts });
-  })
-);
-
-app.post(
-  '/api/settings',
-  wrap(async (req, res) => {
-    const current = store.getSettings();
-    const merged = { ...current, ...req.body };
-    store.saveSettings(merged);
-    res.json({ ok: true, settings: merged });
-  })
-);
-
-// --- Upload / preview / post ----------------------------------------------
-
-app.post(
-  '/api/upload',
+  '/api/analyze',
   upload.single('file'),
   wrap(async (req, res) => {
-    if (!req.file) throw new Error('No file uploaded.');
-    const text = req.file.buffer.toString('utf8');
-    const { headers, rows } = parseCsv(text);
-    if (!headers.length) throw new Error('Could not read any columns from the file.');
+    if (!req.file) throw badRequest('No file uploaded.');
+    const parsed = await parseRemittance(req.file.buffer, req.file.originalname);
+    if (!parsed.rows.length) throw badRequest('No invoice rows found in the file.');
 
-    // Stash for preview/post so the browser does not re-send the whole file.
-    req.session.upload = { headers, rows, filename: req.file.originalname };
+    req.session.remittance = parsed; // stash for the post step
 
-    const saved = store.getSettings();
-    const guessed =
-      saved.columnMap && Object.keys(saved.columnMap).length
-        ? saved.columnMap
-        : guessMapping(headers);
+    const plan = buildPlanFromSession(req);
 
-    res.json({
-      filename: req.file.originalname,
-      headers,
-      rowCount: rows.length,
-      sampleRows: rows.slice(0, 5),
-      suggestedMapping: guessed,
-    });
-  })
-);
-
-app.post(
-  '/api/preview',
-  wrap(async (req, res) => {
-    const uploaded = req.session.upload;
-    if (!uploaded) throw new Error('No uploaded file in this session. Please upload again.');
-    const { columnMap, options } = req.body || {};
-    if (!columnMap) throw new Error('A column mapping is required.');
-
-    const { checks, warnings } = normalizeChecks(uploaded.rows, columnMap, options || {});
-
-    // Flag duplicates against the local ledger.
-    for (const c of checks) {
-      c.duplicate = store.isAlreadyPosted(c.reference);
+    // If connected, do a dry-run posting pass so the review shows invoice
+    // matches, account resolution, and the exact payloads.
+    let review = null;
+    if (qbo.isConnected()) {
+      try {
+        const { deps } = await buildPostDeps();
+        review = await postPlan(plan, deps, { dryRun: true, today: parsed.datePaid });
+      } catch (err) {
+        review = { error: err.message, code: err.code };
+      }
     }
 
     res.json({
-      checks,
-      warnings,
-      totals: summarize(checks),
+      checkNumber: parsed.checkNumber,
+      datePaid: parsed.datePaid,
+      alreadyPosted: store.isAlreadyPosted(parsed.checkNumber),
+      plan,
+      review,
     });
   })
 );
+
+// Re-run the analysis on the file already in the session (after classifying a
+// new code) without re-uploading.
+app.get(
+  '/api/reanalyze',
+  wrap(async (req, res) => {
+    const rem = req.session.remittance;
+    if (!rem) throw badRequest('No remittance in this session. Please upload again.');
+    const plan = buildPlanFromSession(req);
+    let review = null;
+    if (qbo.isConnected()) {
+      try {
+        const { deps } = await buildPostDeps();
+        review = await postPlan(plan, deps, { dryRun: true, today: rem.datePaid });
+      } catch (err) {
+        review = { error: err.message, code: err.code };
+      }
+    }
+    res.json({
+      checkNumber: rem.checkNumber,
+      datePaid: rem.datePaid,
+      alreadyPosted: store.isAlreadyPosted(rem.checkNumber),
+      plan,
+      review,
+    });
+  })
+);
+
+// --- Post ------------------------------------------------------------------
 
 app.post(
   '/api/post',
   wrap(async (req, res) => {
-    if (!qbo.isConnected()) throw new Error('Not connected to QuickBooks.');
-    const { checks, accounts, options } = req.body || {};
-    if (!Array.isArray(checks) || !checks.length) throw new Error('No checks to post.');
-    if (!accounts || !accounts.bank || !accounts.income) {
-      throw new Error('Please choose a bank account and an income account first.');
+    if (!qbo.isConnected()) throw badRequest('Not connected to QuickBooks.');
+    const dryRun = req.body && req.body.dryRun === true; // must explicitly opt into a real post
+    const plan = buildPlanFromSession(req);
+
+    if (!dryRun && store.isAlreadyPosted(plan.meta.checkNumber)) {
+      throw badRequest(`Check ${plan.meta.checkNumber} was already posted.`);
     }
 
-    // Persist the account choice for next time.
-    const settings = store.getSettings();
-    settings.accounts = accounts;
-    if (options && options.columnMap) settings.columnMap = options.columnMap;
-    store.saveSettings(settings);
+    const { deps } = await buildPostDeps();
+    const report = await postPlan(plan, deps, { dryRun, today: plan.meta.datePaid });
 
-    const results = [];
-    for (const check of checks) {
-      const result = { reference: check.reference, net: check.net, status: 'pending' };
-      try {
-        if (!check.valid) throw new Error('Check has validation issues: ' + (check.issues || []).join('; '));
-        if (store.isAlreadyPosted(check.reference)) {
-          result.status = 'skipped';
-          result.message = 'Already posted earlier (duplicate reference).';
-          results.push(result);
-          continue;
-        }
-
-        let customerRef = null;
-        if (check.customer) {
-          const customer = await qbo.ensureCustomer(check.customer);
-          if (customer) customerRef = { value: customer.Id, name: customer.DisplayName };
-        }
-
-        const payload = buildDeposit(check, accounts, {
-          customerRef,
-          memoPrefix: (options && options.memoPrefix) || 'Walmart',
-        });
-        const deposit = await qbo.createDeposit(payload);
-
-        store.recordPosted({
-          reference: check.reference,
-          net: check.net,
-          depositId: deposit.Id,
-          date: check.date,
-          postedAt: new Date().toISOString(),
-        });
-
-        result.status = 'posted';
-        result.depositId = deposit.Id;
-      } catch (err) {
-        result.status = 'error';
-        result.message = err.message;
-      }
-      results.push(result);
+    if (!dryRun) {
+      store.recordPosted({
+        reference: plan.meta.checkNumber,
+        net: report.depositTotal,
+        postedAt: new Date().toISOString(),
+        steps: report.steps,
+      });
     }
-
-    res.json({
-      results,
-      summary: {
-        posted: results.filter((r) => r.status === 'posted').length,
-        skipped: results.filter((r) => r.status === 'skipped').length,
-        errors: results.filter((r) => r.status === 'error').length,
-      },
-    });
+    res.json(report);
   })
 );
 
-app.get(
-  '/api/ledger',
-  wrap(async (req, res) => {
-    res.json(store.getLedger());
-  })
-);
-
-function summarize(checks) {
-  const valid = checks.filter((c) => c.valid && !c.duplicate);
-  return {
-    checkCount: checks.length,
-    readyCount: valid.length,
-    duplicateCount: checks.filter((c) => c.duplicate).length,
-    invalidCount: checks.filter((c) => !c.valid).length,
-    grossTotal: round2(sum(checks.map((c) => c.gross))),
-    feesTotal: round2(sum(checks.map((c) => c.fees))),
-    netTotal: round2(sum(checks.map((c) => c.net))),
-  };
-}
-
-function sum(nums) {
-  return nums.reduce((a, b) => a + (Number(b) || 0), 0);
-}
-function round2(n) {
-  return Math.round((n + Number.EPSILON) * 100) / 100;
+function badRequest(msg) {
+  const e = new Error(msg);
+  e.status = 400;
+  return e;
 }
 
 if (require.main === module) {
@@ -270,8 +238,7 @@ if (require.main === module) {
     const problems = configProblems();
     if (problems.length) {
       // eslint-disable-next-line no-console
-      console.log('  ⚠ QuickBooks not fully configured:', problems.join(', '));
-      console.log('  → Copy .env.example to .env and fill in your Intuit app keys.');
+      console.log('  ⚠ QuickBooks not configured:', problems.join(', '), '- see README / .env.example');
     }
   });
 }

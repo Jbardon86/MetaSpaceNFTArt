@@ -153,12 +153,13 @@ async function getCompanyInfo() {
  */
 async function listAccounts() {
   const qr = await query(
-    "SELECT Id, Name, AccountType, AccountSubType, Classification, CurrentBalance " +
+    "SELECT Id, Name, AcctNum, AccountType, AccountSubType, Classification, CurrentBalance " +
       'FROM Account WHERE Active = true ORDERBY Name MAXRESULTS 1000'
   );
   return (qr.Account || []).map((a) => ({
     id: a.Id,
     name: a.Name,
+    acctNum: a.AcctNum,
     type: a.AccountType,
     subType: a.AccountSubType,
     classification: a.Classification,
@@ -189,6 +190,68 @@ async function ensureCustomer(name) {
 }
 
 /**
+ * Find an invoice by its user-visible number (DocNumber). Returns the QBO Id
+ * or null.
+ */
+async function findInvoiceByDocNumber(docNumber) {
+  const safe = String(docNumber).replace(/'/g, "\\'");
+  const qr = await query(
+    `SELECT Id, DocNumber, Balance, TotalAmt FROM Invoice WHERE DocNumber = '${safe}' MAXRESULTS 1`
+  );
+  return (qr.Invoice && qr.Invoice[0]) || null;
+}
+
+/**
+ * Build a label -> account resolver from the live chart of accounts. Matches on
+ * AcctNum first (via the known-numbers map), then on exact name (case
+ * insensitive). Returns a function label -> id|null.
+ */
+async function buildAccountResolver(accountNumbers = {}) {
+  const accounts = await listAccounts();
+  const byNum = new Map();
+  const byName = new Map();
+  for (const a of accounts) {
+    if (a.acctNum) byNum.set(String(a.acctNum), a.id);
+    byName.set(a.name.toLowerCase(), a.id);
+  }
+  return function accountIdFor(label) {
+    if (!label) return null;
+    const num = accountNumbers[label];
+    if (num && byNum.has(String(num))) return byNum.get(String(num));
+    return byName.get(String(label).toLowerCase()) || null;
+  };
+}
+
+/**
+ * Ensure a service item exists to carry deduction write-offs, mapped to the
+ * given income/expense account. Returns its Id.
+ */
+async function ensureWriteOffItem(accountId, name = 'Walmart Deduction Write-off') {
+  const safe = name.replace(/'/g, "\\'");
+  const qr = await query(`SELECT Id, Name FROM Item WHERE Name = '${safe}' MAXRESULTS 1`);
+  if (qr.Item && qr.Item[0]) return qr.Item[0].Id;
+  const json = await apiRequest('/item', {
+    method: 'POST',
+    body: {
+      Name: name,
+      Type: 'Service',
+      IncomeAccountRef: { value: String(accountId) },
+    },
+  });
+  return json.Item.Id;
+}
+
+async function createCreditMemo(payload) {
+  const json = await apiRequest('/creditmemo', { method: 'POST', body: payload });
+  return json.CreditMemo;
+}
+
+async function createPayment(payload) {
+  const json = await apiRequest('/payment', { method: 'POST', body: payload });
+  return json.Payment;
+}
+
+/**
  * Posts a Bank Deposit. `deposit` is the QBO Deposit payload built in
  * server/deposit.js.
  */
@@ -213,6 +276,11 @@ module.exports = {
   findCustomerByName,
   createCustomer,
   ensureCustomer,
+  findInvoiceByDocNumber,
+  buildAccountResolver,
+  ensureWriteOffItem,
+  createCreditMemo,
+  createPayment,
   createDeposit,
   disconnect,
 };

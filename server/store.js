@@ -6,6 +6,8 @@
 
 const fs = require('fs');
 const path = require('path');
+const defaultDecoder = require('./defaultDecoder');
+const defaultAccounts = require('./defaultAccounts');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 
@@ -63,6 +65,36 @@ function saveSettings(settings) {
   writeJson('mappings.json', settings);
 }
 
+// --- Decoder (deduction code -> handling) ----------------------------------
+
+function getDecoder() {
+  const saved = readJson('decoder.json', null);
+  // start from defaults, let saved entries override/extend
+  return { ...defaultDecoder, ...(saved || {}) };
+}
+
+function saveDecoder(decoder) {
+  writeJson('decoder.json', decoder);
+}
+
+function upsertCode(code, entry) {
+  const saved = readJson('decoder.json', {});
+  saved[code] = entry;
+  writeJson('decoder.json', saved);
+  return getDecoder();
+}
+
+// --- Account routing -------------------------------------------------------
+
+function getAccounts() {
+  const saved = readJson('accounts.json', null);
+  return { ...defaultAccounts, ...(saved || {}) };
+}
+
+function saveAccounts(accounts) {
+  writeJson('accounts.json', accounts);
+}
+
 // --- Posted-check ledger (duplicate guard) ---------------------------------
 
 function getLedger() {
@@ -92,6 +124,11 @@ module.exports = {
   clearTokens,
   getSettings,
   saveSettings,
+  getDecoder,
+  saveDecoder,
+  upsertCode,
+  getAccounts,
+  saveAccounts,
   getLedger,
   recordPosted,
   isAlreadyPosted,

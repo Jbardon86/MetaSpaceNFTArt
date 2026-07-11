@@ -121,3 +121,12 @@ tr.dup td, tr.invalid td { color: var(--muted); }
 }
 .toast.err { border-color: var(--danger); }
 .issues { color: var(--warn); font-size: 11px; white-space: normal; }
+
+h3.sec { font-size: 14px; margin: 20px 0 8px; color: var(--text); }
+tr.totalrow td { font-weight: 700; border-top: 2px solid var(--border); background: var(--panel-2); }
+td.num.neg { color: var(--danger); }
+.banner.ok { background: rgba(44,160,28,.12); border: 1px solid rgba(44,160,28,.4); color: #8fe57e; }
+.uc-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center;
+  padding: 10px; border: 1px solid var(--border); border-radius: 9px; margin-bottom: 8px; background: var(--panel-2); }
+pre.code { background: #0b0e12; border: 1px solid var(--border); border-radius: 9px; padding: 14px;
+  overflow-x: auto; font-size: 12px; line-height: 1.5; max-height: 460px; }
