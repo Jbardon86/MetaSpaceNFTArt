@@ -150,6 +150,15 @@ app.post(
   })
 );
 
+// History of checks posted from this machine (newest first).
+app.get(
+  '/api/history',
+  wrap(async (req, res) => {
+    const ledger = store.getLedger();
+    res.json({ posted: (ledger.posted || []).slice().reverse() });
+  })
+);
+
 // --- Analyze (upload -> plan -> dry-run review) ----------------------------
 
 app.post(

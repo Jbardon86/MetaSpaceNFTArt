@@ -235,8 +235,62 @@ function renderResults(report, dryRun) {
   $('step-results').scrollIntoView({ behavior: 'smooth' });
 }
 
+// --- history ---------------------------------------------------------------
+
+function setNav(view) {
+  $('navImport').classList.toggle('active', view === 'import');
+  $('navHistory').classList.toggle('active', view === 'history');
+}
+
+function showHistory() {
+  setNav('history');
+  document.querySelectorAll('main > .step').forEach((s) => s.classList.add('hidden'));
+  hide('sandboxBar');
+  show('step-history');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  loadHistory();
+}
+
+function showImport() {
+  setNav('import');
+  hide('step-history');
+  show('step-upload');
+  refreshStatus().catch(() => {});
+}
+
+async function loadHistory() {
+  const body = $('historyBody');
+  body.innerHTML = '<p class="sub">Loading…</p>';
+  try {
+    const { posted } = await api('/api/history');
+    if (!posted.length) {
+      body.innerHTML = '<p class="sub">No checks posted from this computer yet. Once you post one, it shows up here.</p>';
+      return;
+    }
+    const rows = posted.map((p) => {
+      const pay = (p.steps || []).find((s) => s.type === 'payment');
+      const dep = (p.steps || []).find((s) => s.type === 'deposit');
+      const ids = [pay && `payment #${esc(pay.id)}`, dep && `deposit #${esc(dep.id)}`].filter(Boolean).join(' · ');
+      return `<tr>
+        <td>${esc(p.reference || '—')}</td>
+        <td class="muted">${esc(fmtDate(p.postedAt))}</td>
+        <td class="num">${money(p.net)}</td>
+        <td class="acct">${ids || '—'}</td>
+      </tr>`;
+    }).join('');
+    body.innerHTML =
+      `<div class="tbl-wrap"><table>
+        <thead><tr><th>Check #</th><th>Posted</th><th class="num">Deposit</th><th>In QuickBooks</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>`;
+  } catch (err) {
+    body.innerHTML = `<div class="banner warn">${esc(err.message)}</div>`;
+  }
+}
+
 // --- wiring ----------------------------------------------------------------
 
+$('navImport').addEventListener('click', showImport);
+$('navHistory').addEventListener('click', showHistory);
 $('connectBtn').addEventListener('click', () => (window.location.href = '/auth/connect'));
 $('disconnectBtn').addEventListener('click', async () => { await api('/api/disconnect', { method: 'POST' }); refreshStatus(); });
 $('dryRunBtn').addEventListener('click', () => doPost(true));

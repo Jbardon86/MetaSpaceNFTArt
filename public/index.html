@@ -15,6 +15,10 @@
           <span>Remittance → QuickBooks</span>
         </div>
       </div>
+      <nav class="nav">
+        <button class="navbtn active" id="navImport">Import</button>
+        <button class="navbtn" id="navHistory">History</button>
+      </nav>
       <div class="connection">
         <span class="status"><span class="status-dot" id="statusDot"></span><span id="connectionText">Checking…</span></span>
         <button id="connectBtn" class="btn primary small hidden">Connect QuickBooks</button>
@@ -90,6 +94,15 @@
           <button class="btn ghost" id="dryRunBtn">Preview</button>
           <span id="postHint" class="hint"></span>
         </div>
+      </section>
+
+      <!-- History -->
+      <section class="card step hidden" id="step-history">
+        <div class="eyebrow">History</div>
+        <h1>Imported checks</h1>
+        <p class="sub">Checks posted from this computer. QuickBooks holds the full, authoritative record —
+          this is a quick reference for what's already been run.</p>
+        <div id="historyBody"></div>
       </section>
 
       <!-- Results -->

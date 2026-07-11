@@ -81,6 +81,14 @@ body {
 }
 .brand-text b { font-weight: 600; letter-spacing: -0.02em; font-size: 15px; display: block; line-height: 1.2; }
 .brand-text span { color: var(--text-2); font-size: 12.5px; }
+.nav { display: flex; gap: 2px; padding: 3px; background: var(--chip); border-radius: 980px; }
+.navbtn {
+  appearance: none; border: none; cursor: pointer; font: inherit; font-size: 13px; font-weight: 500;
+  color: var(--text-2); padding: 5px 14px; border-radius: 980px; background: transparent;
+  transition: background .2s ease, color .2s ease;
+}
+.navbtn.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.navbtn:hover:not(.active) { color: var(--text); }
 .connection { display: flex; align-items: center; gap: 10px; }
 .status {
   display: inline-flex; align-items: center; gap: 7px;
