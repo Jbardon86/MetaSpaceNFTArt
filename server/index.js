@@ -56,6 +56,7 @@ async function buildPostDeps() {
       ensureWriteOffItemId: () => qbo.ensureWriteOffItem(accountIdFor(accountsCfg.paymentWriteOff)),
       createCreditMemo: qbo.createCreditMemo,
       createPayment: qbo.createPayment,
+      deletePayment: qbo.deletePayment,
       createDeposit: qbo.createDeposit,
     },
   };

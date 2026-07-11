@@ -61,14 +61,12 @@ function buildDeposit(resolved) {
 
   // sweep the payment out of Undeposited Funds
   if (resolved.undepositedTotal && resolved.paymentId) {
+    // A line that links an existing (undeposited) payment carries ONLY the
+    // amount + LinkedTxn — no DetailType and no DepositLineDetail block, or QBO
+    // rejects it as "DepositLineDetail is missing".
     lines.push({
       Amount: round2(resolved.undepositedTotal),
-      DetailType: 'DepositLineDetail',
-      Description: `Walmart check ${resolved.checkNumber} payment`,
-      // linking the payment (at the line level, per the QBO schema) tells QBO
-      // this deposit clears that Undeposited Funds payment
       LinkedTxn: [{ TxnId: String(resolved.paymentId), TxnType: 'Payment' }],
-      DepositLineDetail: {},
     });
   }
 
@@ -194,9 +192,10 @@ async function postPlan(plan, deps, opts = {}) {
   });
   report.payloads.payment = paymentPayload;
   let paymentId = 'PAYMENT_DRYRUN';
+  let createdPayment = null;
   if (!dryRun) {
-    const created = await deps.createPayment(paymentPayload);
-    paymentId = created.Id;
+    createdPayment = await deps.createPayment(paymentPayload);
+    paymentId = createdPayment.Id;
     report.steps.push({ type: 'payment', id: paymentId });
   }
 
@@ -214,8 +213,22 @@ async function postPlan(plan, deps, opts = {}) {
   report.payloads.deposit = deposit.payload;
   report.depositTotal = deposit.total;
   if (!dryRun) {
-    const created = await deps.createDeposit(deposit.payload);
-    report.steps.push({ type: 'deposit', id: created.Id, total: deposit.total });
+    try {
+      const created = await deps.createDeposit(deposit.payload);
+      report.steps.push({ type: 'deposit', id: created.Id, total: deposit.total });
+    } catch (depErr) {
+      // Roll back the payment so a failed deposit doesn't leave the invoices
+      // paid with no matching deposit (which would block a clean retry).
+      if (createdPayment && deps.deletePayment) {
+        try {
+          await deps.deletePayment(createdPayment);
+          report.steps = report.steps.filter((s) => s.type !== 'payment');
+        } catch (rollbackErr) {
+          depErr.message += ` (also failed to roll back payment ${paymentId}: ${rollbackErr.message})`;
+        }
+      }
+      throw depErr;
+    }
   }
 
   // Reconciliation guard.

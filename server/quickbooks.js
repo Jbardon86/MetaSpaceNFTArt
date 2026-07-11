@@ -269,6 +269,17 @@ async function createPayment(payload) {
 }
 
 /**
+ * Delete a payment (used to roll back if the deposit fails). Needs Id +
+ * SyncToken from the created payment.
+ */
+async function deletePayment({ Id, SyncToken }) {
+  return apiRequest('/payment?operation=delete', {
+    method: 'POST',
+    body: { Id: String(Id), SyncToken: String(SyncToken != null ? SyncToken : '0') },
+  });
+}
+
+/**
  * Posts a Bank Deposit. `deposit` is the QBO Deposit payload built in
  * server/deposit.js.
  */
@@ -298,6 +309,7 @@ module.exports = {
   ensureWriteOffItem,
   createCreditMemo,
   createPayment,
+  deletePayment,
   createDeposit,
   disconnect,
 };
