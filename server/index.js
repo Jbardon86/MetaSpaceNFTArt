@@ -1,6 +1,7 @@
 'use strict';
 
 const path = require('path');
+const crypto = require('crypto');
 const express = require('express');
 const session = require('express-session');
 const multer = require('multer');
@@ -102,10 +103,18 @@ app.get(
 
 app.get('/auth/connect', (req, res) => {
   if (configProblems().length) return res.status(400).send('QuickBooks app not configured. See README.');
-  res.redirect(qbo.getAuthorizeUrl('walmartcheck'));
+  // CSRF protection: a random state tied to this session, validated on callback.
+  const state = crypto.randomBytes(16).toString('hex');
+  req.session.oauthState = state;
+  res.redirect(qbo.getAuthorizeUrl(state));
 });
 
 app.get('/auth/callback', wrap(async (req, res) => {
+  const returnedState = req.query.state;
+  if (!returnedState || returnedState !== req.session.oauthState) {
+    throw badRequest('Sign-in failed a security check (state mismatch). Please click Connect and try again.');
+  }
+  delete req.session.oauthState;
   await qbo.handleCallback(req.originalUrl);
   res.redirect('/?connected=1');
 }));
