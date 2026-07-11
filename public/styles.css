@@ -154,7 +154,9 @@ h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
 .tile.bad .v { color: var(--critical); }
 
 /* ---- Transactions ---- */
-.txns { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
+.txns { display: grid; grid-template-columns: 1fr 1fr; align-items: start; }
+.txn:first-child { padding-right: 44px; }
+.txn:last-child { padding-left: 44px; border-left: 0.5px solid var(--hairline-strong); }
 .txn-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .txn-head .to { color: var(--text-2); font-size: 13px; }
 .txn-head .to b { color: var(--accent); font-weight: 500; }
@@ -211,7 +213,11 @@ select:focus, input:focus { outline: none; border-color: var(--accent); }
 .toast.err { border-color: var(--critical); color: var(--critical); }
 
 /* ---- Responsive ---- */
-@media (max-width: 860px) { .txns { grid-template-columns: 1fr; gap: 28px; } }
+@media (max-width: 860px) {
+  .txns { grid-template-columns: 1fr; }
+  .txn:first-child { padding-right: 0; padding-bottom: 30px; }
+  .txn:last-child { padding-left: 0; border-left: none; border-top: 0.5px solid var(--hairline-strong); padding-top: 30px; }
+}
 @media (max-width: 560px) {
   .tiles, .totals { grid-template-columns: 1fr 1fr; }
   .tiles .tile:last-child, .totals .tile:last-child { grid-column: span 2; }
