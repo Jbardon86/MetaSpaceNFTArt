@@ -9,19 +9,21 @@ import { OrderDraftProvider } from './src/store/OrderDraft';
 import { RootStackParamList } from './src/navigation';
 import { colors } from './src/theme';
 
-import LoginScreen from './src/screens/LoginScreen';
-import HomeScreen from './src/screens/HomeScreen';
-import OrderCustomerScreen from './src/screens/OrderCustomerScreen';
+import WelcomeScreen from './src/screens/WelcomeScreen';
+import DetailsScreen from './src/screens/DetailsScreen';
 import OrderProductsScreen from './src/screens/OrderProductsScreen';
 import OrderProductDetailScreen from './src/screens/OrderProductDetailScreen';
 import OrderReviewScreen from './src/screens/OrderReviewScreen';
+import ConfirmationScreen from './src/screens/ConfirmationScreen';
+import StaffScreen from './src/screens/StaffScreen';
+import StaffOrdersScreen from './src/screens/StaffOrdersScreen';
 import OrderDetailScreen from './src/screens/OrderDetailScreen';
 import CatalogScreen from './src/screens/CatalogScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 function Root() {
-  const { loading, session } = useApp();
+  const { loading } = useApp();
 
   if (loading) {
     return (
@@ -34,6 +36,7 @@ function Root() {
   return (
     <NavigationContainer>
       <Stack.Navigator
+        initialRouteName="Welcome"
         screenOptions={{
           headerStyle: { backgroundColor: colors.primary },
           headerTintColor: '#fff',
@@ -41,39 +44,20 @@ function Root() {
           contentStyle: { backgroundColor: colors.bg },
         }}
       >
-        {!session ? (
-          <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
-        ) : (
-          <>
-            <Stack.Screen name="Home" component={HomeScreen} options={{ title: 'Orders' }} />
-            <Stack.Screen
-              name="OrderCustomer"
-              component={OrderCustomerScreen}
-              options={{ title: 'Choose Customer', presentation: 'modal' }}
-            />
-            <Stack.Screen
-              name="OrderProducts"
-              component={OrderProductsScreen}
-              options={{ title: 'Add Products' }}
-            />
-            <Stack.Screen
-              name="OrderProductDetail"
-              component={OrderProductDetailScreen}
-              options={{ title: '' }}
-            />
-            <Stack.Screen
-              name="OrderReview"
-              component={OrderReviewScreen}
-              options={{ title: 'Cart' }}
-            />
-            <Stack.Screen
-              name="OrderDetail"
-              component={OrderDetailScreen}
-              options={{ title: 'Order' }}
-            />
-            <Stack.Screen name="Catalog" component={CatalogScreen} options={{ title: 'Catalog' }} />
-          </>
-        )}
+        <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Details" component={DetailsScreen} options={{ title: 'Your Details' }} />
+        <Stack.Screen name="OrderProducts" component={OrderProductsScreen} options={{ title: 'Products' }} />
+        <Stack.Screen name="OrderProductDetail" component={OrderProductDetailScreen} options={{ title: '' }} />
+        <Stack.Screen name="OrderReview" component={OrderReviewScreen} options={{ title: 'Your Order' }} />
+        <Stack.Screen
+          name="Confirmation"
+          component={ConfirmationScreen}
+          options={{ headerShown: false, gestureEnabled: false }}
+        />
+        <Stack.Screen name="Staff" component={StaffScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="StaffOrders" component={StaffOrdersScreen} options={{ title: 'Orders' }} />
+        <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ title: 'Order' }} />
+        <Stack.Screen name="Catalog" component={CatalogScreen} options={{ title: 'Catalog' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

@@ -29,7 +29,8 @@ export default function OrderReviewScreen({ navigation }: ScreenProps<'OrderRevi
 
   const submit = async () => {
     if (!draft.customer) {
-      Alert.alert('Add a customer', 'Choose who this order is for before confirming.');
+      Alert.alert('Your details', 'Please add your details before confirming.');
+      navigation.navigate('Details');
       return;
     }
     setSubmitting(true);
@@ -39,10 +40,10 @@ export default function OrderReviewScreen({ navigation }: ScreenProps<'OrderRevi
         lines: draft.lines,
         notes: draft.notes,
       });
-      draft.reset();
+      // Go to the thank-you screen; it resets the kiosk for the next customer.
       navigation.reset({
-        index: 1,
-        routes: [{ name: 'Home' }, { name: 'OrderDetail', params: { orderId: order.id } }],
+        index: 0,
+        routes: [{ name: 'Confirmation', params: { orderId: order.id } }],
       });
     } finally {
       setSubmitting(false);
@@ -68,30 +69,31 @@ export default function OrderReviewScreen({ navigation }: ScreenProps<'OrderRevi
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 120 }}
       >
-        {/* Customer */}
-        <Text style={styles.sectionLabel}>Customer</Text>
-        <Pressable onPress={() => navigation.navigate('OrderCustomer')}>
+        {/* Your details */}
+        <Text style={styles.sectionLabel}>Your details</Text>
+        <Pressable onPress={() => navigation.navigate('Details')}>
           <Card style={styles.customerCard}>
             {draft.customer ? (
               <>
-                <Avatar name={draft.customer.company || draft.customer.name} />
+                <Avatar name={draft.customer.name || draft.customer.company} />
                 <View style={{ flex: 1, marginLeft: spacing.md }}>
-                  <Text style={styles.company}>
-                    {draft.customer.company || draft.customer.name}
-                  </Text>
+                  <Text style={styles.company}>{draft.customer.name}</Text>
                   {draft.customer.company ? (
-                    <Text style={styles.sub}>{draft.customer.name}</Text>
+                    <Text style={styles.sub}>{draft.customer.company}</Text>
+                  ) : null}
+                  {draft.customer.email ? (
+                    <Text style={styles.sub}>{draft.customer.email}</Text>
                   ) : null}
                 </View>
-                <Text style={styles.change}>Change</Text>
+                <Text style={styles.change}>Edit</Text>
               </>
             ) : (
               <>
                 <View style={styles.addCustomerIcon}>
                   <Text style={{ fontSize: 22, color: colors.primary }}>＋</Text>
                 </View>
-                <Text style={styles.addCustomerText}>Add a customer</Text>
-                <Text style={styles.change}>Choose</Text>
+                <Text style={styles.addCustomerText}>Add your details</Text>
+                <Text style={styles.change}>Add</Text>
               </>
             )}
           </Card>

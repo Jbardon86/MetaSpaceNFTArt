@@ -1,26 +1,36 @@
 // ---------------------------------------------------------------------------
-// COMPANY BRANDING — change these to make the app yours.
+// COMPANY BRANDING & KIOSK CONFIG — change these to make the app yours.
 //
-// This is the one place to set your company's "vibe". The primary color also
-// lives in theme.ts (colors.primary) — update both to your brand color.
+// This is the one place to set your company's "vibe" and the customer-facing
+// welcome copy. The primary color also lives in theme.ts (colors.primary).
 // ---------------------------------------------------------------------------
 
 export const brand = {
-  /** Shown on the login screen and as the app's identity. */
+  /** Company name shown throughout. */
   companyName: 'MetaSpace',
-  /** Full product/app name on the login screen. */
-  appName: 'MetaSpace Orders',
-  /** Small line under the app name. */
-  tagline: 'Tradeshow order entry',
-  /**
-   * Logo shown on the login screen. Either:
-   *  - an emoji (default), or
-   *  - a require() to a local image, e.g. require('../assets/logo.png'), or
-   *  - a { uri: 'https://…' } remote image.
-   * Set `logoImage` to use an image instead of the emoji.
-   */
+
+  /** Logo on the welcome screen. Either an emoji, a require('../assets/logo.png'),
+   *  or a { uri: 'https://…' } remote image. Set `logoImage` to use an image. */
   logoEmoji: '🎨',
   logoImage: null as null | number | { uri: string },
+
+  // ---- Welcome screen (what the customer sees first) ----
+  welcomeTitle: 'Welcome to MetaSpace',
+  welcomeSubtitle: 'Browse our collection and place your order',
+  /** Short "about us" blurb shown on the welcome screen. */
+  aboutText:
+    'MetaSpace creates premium prints, canvases, and collectibles bridging digital art and the physical world. Tap below to start your order — a team member will follow up to finalize the details.',
+
+  // ---- Order attribution ----
+  /** Label stored on each order (which booth/kiosk it came from). */
+  deviceName: 'Booth Kiosk',
+  /** Event/tradeshow name stored on each order. Staff can leave blank. */
+  eventName: '',
+
+  // ---- Staff access ----
+  /** PIN to reach the staff area (view orders + manage catalog). CHANGE THIS. */
+  staffPin: '1234',
+
   /** Your brand color. Keep in sync with colors.primary in theme.ts. */
   brandColor: '#007AFF',
 };

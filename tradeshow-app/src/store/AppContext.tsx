@@ -11,6 +11,7 @@ import { Customer, Order, Product, Session } from '../types';
 import { newId } from './id';
 import * as db from './db';
 import { MockSalesforceAdapter } from '../salesforce/adapter';
+import { brand } from '../brand';
 // Phase 2: import { RestSalesforceAdapter } from '../salesforce/restAdapter';
 
 // Swap this line to go live in Phase 2:
@@ -180,8 +181,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         id: newId(),
         createdAt: new Date().toISOString(),
         status: 'pending',
-        repName: session?.repName ?? 'Unknown Rep',
-        eventName: session?.eventName ?? '',
+        repName: brand.deviceName,
+        eventName: brand.eventName,
         salesforceId: null,
         syncError: null,
       };
@@ -193,7 +194,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       persistOrders(withNew.map((o) => (o.id === order.id ? pushed : o)));
       return pushed;
     },
-    [persistOrders, pushOne, session]
+    [persistOrders, pushOne]
   );
 
   const pendingCount = useMemo(
