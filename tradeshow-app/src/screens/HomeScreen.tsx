@@ -1,7 +1,7 @@
 import { useLayoutEffect } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Badge, Button, Card, EmptyState } from '../components/ui';
+import { Avatar, Badge, Button, Card, EmptyState } from '../components/ui';
 import { useApp } from '../store/AppContext';
 import { useDraft } from '../store/OrderDraft';
 import { ScreenProps } from '../navigation';
@@ -30,7 +30,7 @@ export default function HomeScreen({ navigation }: ScreenProps<'Home'>) {
 
   const startOrder = () => {
     draft.reset();
-    navigation.navigate('OrderCustomer');
+    navigation.navigate('OrderProducts');
   };
 
   return (
@@ -94,7 +94,8 @@ function OrderRow({
   return (
     <Pressable onPress={() => navigation.navigate('OrderDetail', { orderId: order.id })}>
       <Card style={styles.orderCard}>
-        <View style={{ flex: 1 }}>
+        <Avatar name={order.customer.company || order.customer.name || 'New'} />
+        <View style={{ flex: 1, marginLeft: spacing.md }}>
           <Text style={styles.company} numberOfLines={1}>
             {order.customer.company || order.customer.name || 'New customer'}
           </Text>

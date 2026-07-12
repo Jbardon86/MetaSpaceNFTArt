@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Card } from '../components/ui';
+import { AddButton, Avatar, Card, CartBar, QtyStepper } from '../components/ui';
 import { useApp } from '../store/AppContext';
 import { useDraft } from '../store/OrderDraft';
 import { ScreenProps } from '../navigation';
 import { formatMoney, orderItemCount, orderTotal, Product } from '../types';
 import { colors, font, radius, spacing } from '../theme';
 
+// The "shop": browse products, tap Add, items collect in the cart bar.
 export default function OrderProductsScreen({ navigation }: ScreenProps<'OrderProducts'>) {
   const { products } = useApp();
   const draft = useDraft();
@@ -46,7 +47,7 @@ export default function OrderProductsScreen({ navigation }: ScreenProps<'OrderPr
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 130 }}
         renderItem={({ item }) => (
-          <ProductRow
+          <ProductCard
             product={item}
             qty={qtyFor(item.id)}
             onAdd={() => draft.addProduct(item)}
@@ -61,26 +62,18 @@ export default function OrderProductsScreen({ navigation }: ScreenProps<'OrderPr
         }
       />
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.footerLabel}>
-            {count} item{count === 1 ? '' : 's'}
-          </Text>
-          <Text style={styles.footerTotal}>{formatMoney(total)}</Text>
-        </View>
-        <View style={{ width: 160 }}>
-          <Button
-            title="Review"
-            onPress={() => navigation.navigate('OrderReview')}
-            disabled={draft.lines.length === 0}
-          />
-        </View>
-      </View>
+      <CartBar
+        count={count}
+        total={formatMoney(total)}
+        label={`Review order`}
+        bottomInset={insets.bottom}
+        onPress={() => navigation.navigate('OrderReview')}
+      />
     </View>
   );
 }
 
-function ProductRow({
+function ProductCard({
   product,
   qty,
   onAdd,
@@ -95,27 +88,18 @@ function ProductRow({
 }) {
   return (
     <Card style={styles.row}>
-      <View style={{ flex: 1 }}>
+      <Avatar name={product.name} size={48} />
+      <View style={{ flex: 1, marginLeft: spacing.md }}>
         <Text style={styles.name}>{product.name}</Text>
+        <Text style={styles.price}>{formatMoney(product.price)}</Text>
         <Text style={styles.sub}>
-          {product.sku ? `${product.sku} · ` : ''}
-          {formatMoney(product.price)} / {product.unit}
+          {product.sku ? `${product.sku} · ` : ''}per {product.unit}
         </Text>
       </View>
       {qty === 0 ? (
-        <Pressable onPress={onAdd} style={styles.addBtn}>
-          <Text style={styles.addBtnText}>Add</Text>
-        </Pressable>
+        <AddButton onAdd={onAdd} />
       ) : (
-        <View style={styles.stepper}>
-          <Pressable onPress={onDec} style={styles.stepBtn} hitSlop={8}>
-            <Text style={styles.stepText}>−</Text>
-          </Pressable>
-          <Text style={styles.qty}>{qty}</Text>
-          <Pressable onPress={onInc} style={styles.stepBtn} hitSlop={8}>
-            <Text style={styles.stepText}>＋</Text>
-          </Pressable>
-        </View>
+        <QtyStepper qty={qty} onInc={onInc} onDec={onDec} />
       )}
     </Card>
   );
@@ -136,39 +120,7 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md },
   name: { fontSize: font.h3, fontWeight: '700', color: colors.text },
+  price: { fontSize: font.body, fontWeight: '800', color: colors.primary, marginTop: 2 },
   sub: { fontSize: font.small, color: colors.textMuted, marginTop: 2 },
-  addBtn: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    borderRadius: radius.md,
-  },
-  addBtnText: { color: '#fff', fontWeight: '700', fontSize: font.body },
-  stepper: { flexDirection: 'row', alignItems: 'center' },
-  stepBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
-    backgroundColor: colors.primary + '15',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepText: { fontSize: 22, color: colors.primary, fontWeight: '700' },
-  qty: { minWidth: 36, textAlign: 'center', fontSize: font.h3, fontWeight: '700', color: colors.text },
-  footer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    backgroundColor: colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  footerLabel: { fontSize: font.small, color: colors.textMuted },
-  footerTotal: { fontSize: font.h2, fontWeight: '800', color: colors.text },
   noResults: { textAlign: 'center', color: colors.textMuted, marginTop: spacing.xl, fontSize: font.body },
 });

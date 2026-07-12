@@ -48,17 +48,17 @@ function Root() {
             <Stack.Screen
               name="OrderCustomer"
               component={OrderCustomerScreen}
-              options={{ title: 'Customer' }}
+              options={{ title: 'Choose Customer', presentation: 'modal' }}
             />
             <Stack.Screen
               name="OrderProducts"
               component={OrderProductsScreen}
-              options={{ title: 'Products' }}
+              options={{ title: 'Add Products' }}
             />
             <Stack.Screen
               name="OrderReview"
               component={OrderReviewScreen}
-              options={{ title: 'Review Order' }}
+              options={{ title: 'Cart' }}
             />
             <Stack.Screen
               name="OrderDetail"

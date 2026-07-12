@@ -1,20 +1,23 @@
-// Central design tokens. Kept small and flat so screens stay consistent and
-// buttons are big/tappable for use on a busy tradeshow floor.
+import { Platform, ViewStyle } from 'react-native';
+
+// iOS-flavored design tokens: system colors, grouped backgrounds, soft shadows.
+// Tuned to feel like a native iOS app.
 
 export const colors = {
-  primary: '#2563EB', // blue-600
-  primaryDark: '#1D4ED8',
-  bg: '#F1F5F9', // slate-100
+  primary: '#007AFF', // iOS system blue
+  primaryDark: '#0062CC',
+  primarySoft: '#E9F2FF',
+  bg: '#F2F2F7', // iOS grouped background
   surface: '#FFFFFF',
-  border: '#E2E8F0', // slate-200
-  text: '#0F172A', // slate-900
-  textMuted: '#64748B', // slate-500
-  success: '#16A34A', // green-600
-  warning: '#D97706', // amber-600
-  danger: '#DC2626', // red-600
-  pending: '#D97706',
-  synced: '#16A34A',
-  error: '#DC2626',
+  border: '#E5E5EA', // iOS separator
+  text: '#1C1C1E',
+  textMuted: '#8E8E93', // iOS secondary label
+  success: '#34C759', // iOS green
+  warning: '#FF9500', // iOS orange
+  danger: '#FF3B30', // iOS red
+  pending: '#FF9500',
+  synced: '#34C759',
+  error: '#FF3B30',
 };
 
 export const spacing = {
@@ -27,21 +30,53 @@ export const spacing = {
 };
 
 export const radius = {
-  sm: 8,
-  md: 12,
-  lg: 16,
+  sm: 10,
+  md: 14,
+  lg: 20,
   pill: 999,
 };
 
 export const font = {
-  h1: 28,
-  h2: 22,
+  h1: 32,
+  h2: 24,
   h3: 18,
   body: 16,
   small: 13,
 };
 
-/** Maps a sync status to a display color + label. */
+// Soft, "bubbly" shadow used on buttons and cards.
+export function shadow(elevation = 6, color = '#000'): ViewStyle {
+  return Platform.select<ViewStyle>({
+    ios: {
+      shadowColor: color,
+      shadowOffset: { width: 0, height: elevation / 2 },
+      shadowOpacity: 0.14,
+      shadowRadius: elevation,
+    },
+    android: { elevation },
+    default: {
+      // web
+      boxShadow: `0 ${elevation / 2}px ${elevation}px rgba(0,0,0,0.14)`,
+    } as unknown as ViewStyle,
+  })!;
+}
+
+/** Colored shadow that matches a button's fill, for a glossier pop. */
+export function coloredShadow(color: string, elevation = 8): ViewStyle {
+  return Platform.select<ViewStyle>({
+    ios: {
+      shadowColor: color,
+      shadowOffset: { width: 0, height: elevation / 2 },
+      shadowOpacity: 0.35,
+      shadowRadius: elevation,
+    },
+    android: { elevation },
+    default: {
+      boxShadow: `0 ${elevation / 2}px ${elevation}px ${color}59`,
+    } as unknown as ViewStyle,
+  })!;
+}
+
 export function statusMeta(status: string): { color: string; label: string } {
   switch (status) {
     case 'synced':

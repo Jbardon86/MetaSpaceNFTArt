@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Card, Field } from '../components/ui';
+import { Avatar, Button, Card, Field } from '../components/ui';
 import { useApp } from '../store/AppContext';
 import { useDraft } from '../store/OrderDraft';
 import { ScreenProps } from '../navigation';
@@ -44,7 +44,7 @@ export default function OrderCustomerScreen({ navigation }: ScreenProps<'OrderCu
 
   const choose = (c: Customer) => {
     draft.setCustomer(c);
-    navigation.navigate('OrderProducts');
+    navigation.goBack(); // back to the cart
   };
 
   const saveNew = async () => {
@@ -55,7 +55,7 @@ export default function OrderCustomerScreen({ navigation }: ScreenProps<'OrderCu
       phone: phone.trim(),
     });
     draft.setCustomer(created);
-    navigation.navigate('OrderProducts');
+    navigation.goBack(); // back to the cart
   };
 
   const canSaveNew = name.trim().length > 0 || company.trim().length > 0;
@@ -111,7 +111,8 @@ export default function OrderCustomerScreen({ navigation }: ScreenProps<'OrderCu
         renderItem={({ item }) => (
           <Pressable onPress={() => choose(item)}>
             <Card style={styles.row}>
-              <View style={{ flex: 1 }}>
+              <Avatar name={item.company || item.name} />
+              <View style={{ flex: 1, marginLeft: spacing.md }}>
                 <Text style={styles.company}>{item.company || item.name}</Text>
                 {item.company ? <Text style={styles.sub}>{item.name}</Text> : null}
                 {item.email ? <Text style={styles.sub}>{item.email}</Text> : null}
