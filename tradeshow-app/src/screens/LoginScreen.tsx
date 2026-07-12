@@ -8,8 +8,10 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Image } from 'react-native';
 import { Button, Field } from '../components/ui';
 import { useApp } from '../store/AppContext';
+import { brand } from '../brand';
 import { colors, font, spacing } from '../theme';
 
 // Phase 1: simple rep name + event name. In Phase 2 this becomes
@@ -35,9 +37,13 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.brand}>
-          <Text style={styles.logo}>🎨</Text>
-          <Text style={styles.title}>MetaSpace Orders</Text>
-          <Text style={styles.subtitle}>Tradeshow order entry</Text>
+          {brand.logoImage ? (
+            <Image source={brand.logoImage} style={styles.logoImg} resizeMode="contain" />
+          ) : (
+            <Text style={styles.logo}>{brand.logoEmoji}</Text>
+          )}
+          <Text style={styles.title}>{brand.appName}</Text>
+          <Text style={styles.subtitle}>{brand.tagline}</Text>
         </View>
 
         <View style={styles.card}>
@@ -75,6 +81,7 @@ const styles = StyleSheet.create({
   container: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.xl },
   brand: { alignItems: 'center', marginBottom: spacing.xxl },
   logo: { fontSize: 56, marginBottom: spacing.md },
+  logoImg: { width: 96, height: 96, marginBottom: spacing.md },
   title: { fontSize: font.h1, fontWeight: '800', color: '#fff' },
   subtitle: { fontSize: font.body, color: '#DBEAFE', marginTop: spacing.xs },
   card: {

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { FlatList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AddButton, Avatar, Card, CartBar, QtyStepper } from '../components/ui';
+import { AddButton, Card, CartBar, ProductImage, QtyStepper } from '../components/ui';
 import { useApp } from '../store/AppContext';
 import { useDraft } from '../store/OrderDraft';
 import { ScreenProps } from '../navigation';
@@ -88,19 +88,28 @@ function ProductCard({
 }) {
   return (
     <Card style={styles.row}>
-      <Avatar name={product.name} size={48} />
+      <ProductImage uri={product.imageUri} name={product.name} size={68} />
       <View style={{ flex: 1, marginLeft: spacing.md }}>
-        <Text style={styles.name}>{product.name}</Text>
-        <Text style={styles.price}>{formatMoney(product.price)}</Text>
-        <Text style={styles.sub}>
-          {product.sku ? `${product.sku} · ` : ''}per {product.unit}
+        <Text style={styles.name} numberOfLines={2}>
+          {product.name}
+        </Text>
+        {product.description ? (
+          <Text style={styles.desc} numberOfLines={2}>
+            {product.description}
+          </Text>
+        ) : null}
+        <Text style={styles.price}>
+          {formatMoney(product.price)}
+          <Text style={styles.sub}> · per {product.unit}</Text>
         </Text>
       </View>
-      {qty === 0 ? (
-        <AddButton onAdd={onAdd} />
-      ) : (
-        <QtyStepper qty={qty} onInc={onInc} onDec={onDec} />
-      )}
+      <View style={styles.action}>
+        {qty === 0 ? (
+          <AddButton onAdd={onAdd} />
+        ) : (
+          <QtyStepper qty={qty} onInc={onInc} onDec={onDec} />
+        )}
+      </View>
     </Card>
   );
 }
@@ -120,7 +129,9 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md },
   name: { fontSize: font.h3, fontWeight: '700', color: colors.text },
-  price: { fontSize: font.body, fontWeight: '800', color: colors.primary, marginTop: 2 },
-  sub: { fontSize: font.small, color: colors.textMuted, marginTop: 2 },
+  desc: { fontSize: font.small, color: colors.textMuted, marginTop: 2 },
+  price: { fontSize: font.body, fontWeight: '800', color: colors.primary, marginTop: 4 },
+  sub: { fontSize: font.small, color: colors.textMuted, fontWeight: '500' },
+  action: { marginLeft: spacing.sm },
   noResults: { textAlign: 'center', color: colors.textMuted, marginTop: spacing.xl, fontSize: font.body },
 });

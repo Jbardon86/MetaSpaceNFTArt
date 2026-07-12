@@ -39,6 +39,7 @@ export function OrderDraftProvider({ children }: { children: React.ReactNode }) 
         unitPrice: p.price,
         quantity: 1,
         discountPct: 0,
+        imageUri: p.imageUri ?? null,
       };
       return [...prev, line];
     });

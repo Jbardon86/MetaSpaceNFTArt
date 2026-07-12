@@ -14,6 +14,10 @@ export interface Product {
   /** e.g. "each", "case", "hour". Free text. */
   unit: string;
   active: boolean;
+  /** Short marketing description shown on the product/checkout card. */
+  description?: string;
+  /** Product photo — a data URI (picked photo) or an https image URL. */
+  imageUri?: string | null;
   /** Salesforce Product2 Id once synced; null until then. */
   salesforceId?: string | null;
 }
@@ -39,6 +43,8 @@ export interface OrderLine {
   quantity: number;
   /** Per-line discount as a percentage 0–100. */
   discountPct: number;
+  /** Snapshot of the product photo at time of order. */
+  imageUri?: string | null;
 }
 
 export type SyncStatus = 'draft' | 'pending' | 'syncing' | 'synced' | 'error';

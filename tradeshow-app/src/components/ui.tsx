@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
+  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -207,6 +208,55 @@ export function Avatar({ name, size = 44 }: { name: string; size?: number }) {
       }}
     >
       <Text style={{ color: bg, fontWeight: '800', fontSize: size * 0.36 }}>{initials || '•'}</Text>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ProductImage — Amazon-style photo tile; falls back to an initials tile.
+// ---------------------------------------------------------------------------
+export function ProductImage({
+  uri,
+  name,
+  size = 56,
+  rounded = radius.md,
+}: {
+  uri?: string | null;
+  name: string;
+  size?: number;
+  rounded?: number;
+}) {
+  if (uri) {
+    return (
+      <Image
+        source={{ uri }}
+        style={{ width: size, height: size, borderRadius: rounded, backgroundColor: colors.bg }}
+        resizeMode="cover"
+      />
+    );
+  }
+  const initials = name
+    .split(' ')
+    .map((w) => w[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  const bg = AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: rounded,
+        backgroundColor: bg + '22',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Text style={{ color: bg, fontWeight: '800', fontSize: size * 0.32 }}>{initials || '•'}</Text>
     </View>
   );
 }

@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Avatar, Button, Card, EmptyState, QtyStepper } from '../components/ui';
+import { Avatar, Button, Card, EmptyState, ProductImage, QtyStepper } from '../components/ui';
 import { useApp } from '../store/AppContext';
 import { useDraft } from '../store/OrderDraft';
 import { ScreenProps } from '../navigation';
@@ -107,8 +107,9 @@ export default function OrderReviewScreen({ navigation }: ScreenProps<'OrderRevi
               key={l.productId}
               style={[styles.lineRow, i < draft.lines.length - 1 && styles.lineDivider]}
             >
-              <View style={{ flex: 1, marginRight: spacing.md }}>
-                <Text style={styles.lineName}>{l.name}</Text>
+              <ProductImage uri={l.imageUri} name={l.name} size={48} />
+              <View style={{ flex: 1, marginHorizontal: spacing.md }}>
+                <Text style={styles.lineName} numberOfLines={2}>{l.name}</Text>
                 <Text style={styles.sub}>
                   {formatMoney(l.unitPrice)} · {formatMoney(lineTotal(l))}
                 </Text>

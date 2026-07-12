@@ -1,6 +1,6 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Badge, Button, Card, EmptyState } from '../components/ui';
+import { Badge, Button, Card, EmptyState, ProductImage } from '../components/ui';
 import { useApp } from '../store/AppContext';
 import { ScreenProps } from '../navigation';
 import { formatMoney, lineTotal, orderTotal } from '../types';
@@ -48,7 +48,8 @@ export default function OrderDetailScreen({ route }: ScreenProps<'OrderDetail'>)
         <Text style={styles.sectionLabel}>Items</Text>
         {order.lines.map((l) => (
           <View key={l.productId} style={styles.lineRow}>
-            <View style={{ flex: 1 }}>
+            <ProductImage uri={l.imageUri} name={l.name} size={44} />
+            <View style={{ flex: 1, marginHorizontal: spacing.md }}>
               <Text style={styles.lineName}>{l.name}</Text>
               <Text style={styles.sub}>
                 {l.quantity} × {formatMoney(l.unitPrice)}

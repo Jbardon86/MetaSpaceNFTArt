@@ -97,6 +97,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             price: p.price ?? 0,
             unit: p.unit ?? 'each',
             active: p.active ?? true,
+            description: p.description ?? '',
+            imageUri: p.imageUri ?? null,
             salesforceId: null,
           };
           next = [created, ...prev];
