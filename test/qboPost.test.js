@@ -91,6 +91,10 @@ test('postPlan applies the payment as the invoices own customer', async () => {
   const report = await postPlan(plan(), deps, { dryRun: true });
   assert.strictEqual(report.payloads.payment.CustomerRef.value, '42');
   assert.ok(!report.warnings.some((w) => /customer/i.test(w)));
+  // deposit adjustment lines are tagged with the customer ("Received From")
+  const adjLine = report.payloads.deposit.Line.find((l) => l.DepositLineDetail && l.DepositLineDetail.AccountRef);
+  assert.strictEqual(adjLine.DepositLineDetail.Entity.value, '42');
+  assert.strictEqual(adjLine.DepositLineDetail.Entity.type, 'Customer');
 });
 
 test('postPlan flags a missing invoice instead of failing', async () => {

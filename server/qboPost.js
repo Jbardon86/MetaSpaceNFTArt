@@ -70,12 +70,18 @@ function buildDeposit(resolved) {
     });
   }
 
+  // Tag the adjustment lines with the customer ("Received From") so the
+  // Disputed AR balance is trackable by customer.
+  const entity =
+    resolved.entityId && !String(resolved.entityId).startsWith('UNRESOLVED')
+      ? { Entity: { value: String(resolved.entityId), type: 'Customer' } }
+      : {};
   for (const adj of resolved.adjustments) {
     lines.push({
       Amount: round2(adj.amount),
       DetailType: 'DepositLineDetail',
       Description: adj.description,
-      DepositLineDetail: { AccountRef: { value: String(adj.accountId) } },
+      DepositLineDetail: { AccountRef: { value: String(adj.accountId) }, ...entity },
     });
   }
 
@@ -221,6 +227,7 @@ async function postPlan(plan, deps, opts = {}) {
     txnDate,
     checkNumber,
     paymentId,
+    entityId: customerId,
     undepositedTotal: round2(resolvedInvoices.reduce((s, i) => s + i.cash, 0)),
     adjustments,
   });
