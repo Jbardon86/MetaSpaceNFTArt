@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { FlatList, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddButton, Card, CartBar, ProductImage, QtyStepper } from '../components/ui';
 import { useApp } from '../store/AppContext';
@@ -50,6 +50,7 @@ export default function OrderProductsScreen({ navigation }: ScreenProps<'OrderPr
           <ProductCard
             product={item}
             qty={qtyFor(item.id)}
+            onOpen={() => navigation.navigate('OrderProductDetail', { productId: item.id })}
             onAdd={() => draft.addProduct(item)}
             onInc={() => draft.setQuantity(item.id, qtyFor(item.id) + 1)}
             onDec={() => draft.setQuantity(item.id, qtyFor(item.id) - 1)}
@@ -76,33 +77,37 @@ export default function OrderProductsScreen({ navigation }: ScreenProps<'OrderPr
 function ProductCard({
   product,
   qty,
+  onOpen,
   onAdd,
   onInc,
   onDec,
 }: {
   product: Product;
   qty: number;
+  onOpen: () => void;
   onAdd: () => void;
   onInc: () => void;
   onDec: () => void;
 }) {
   return (
     <Card style={styles.row}>
-      <ProductImage uri={product.imageUri} name={product.name} size={68} />
-      <View style={{ flex: 1, marginLeft: spacing.md }}>
-        <Text style={styles.name} numberOfLines={2}>
-          {product.name}
-        </Text>
-        {product.description ? (
-          <Text style={styles.desc} numberOfLines={2}>
-            {product.description}
+      <Pressable style={styles.cardMain} onPress={onOpen}>
+        <ProductImage uri={product.imageUri} name={product.name} size={68} />
+        <View style={{ flex: 1, marginLeft: spacing.md }}>
+          <Text style={styles.name} numberOfLines={2}>
+            {product.name}
           </Text>
-        ) : null}
-        <Text style={styles.price}>
-          {formatMoney(product.price)}
-          <Text style={styles.sub}> · per {product.unit}</Text>
-        </Text>
-      </View>
+          {product.description ? (
+            <Text style={styles.desc} numberOfLines={2}>
+              {product.description}
+            </Text>
+          ) : null}
+          <Text style={styles.price}>
+            {formatMoney(product.price)}
+            <Text style={styles.sub}> · per {product.unit}</Text>
+          </Text>
+        </View>
+      </Pressable>
       <View style={styles.action}>
         {qty === 0 ? (
           <AddButton onAdd={onAdd} />
@@ -128,6 +133,7 @@ const styles = StyleSheet.create({
     minHeight: 50,
   },
   row: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md },
+  cardMain: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   name: { fontSize: font.h3, fontWeight: '700', color: colors.text },
   desc: { fontSize: font.small, color: colors.textMuted, marginTop: 2 },
   price: { fontSize: font.body, fontWeight: '800', color: colors.primary, marginTop: 4 },

@@ -13,6 +13,7 @@ import LoginScreen from './src/screens/LoginScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import OrderCustomerScreen from './src/screens/OrderCustomerScreen';
 import OrderProductsScreen from './src/screens/OrderProductsScreen';
+import OrderProductDetailScreen from './src/screens/OrderProductDetailScreen';
 import OrderReviewScreen from './src/screens/OrderReviewScreen';
 import OrderDetailScreen from './src/screens/OrderDetailScreen';
 import CatalogScreen from './src/screens/CatalogScreen';
@@ -54,6 +55,11 @@ function Root() {
               name="OrderProducts"
               component={OrderProductsScreen}
               options={{ title: 'Add Products' }}
+            />
+            <Stack.Screen
+              name="OrderProductDetail"
+              component={OrderProductDetailScreen}
+              options={{ title: '' }}
             />
             <Stack.Screen
               name="OrderReview"

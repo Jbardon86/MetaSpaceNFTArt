@@ -11,7 +11,9 @@ const KEYS = {
   customers: 'tso.customers',
   orders: 'tso.orders',
   session: 'tso.session',
-  seeded: 'tso.seeded.v1',
+  // Bump this version to re-seed the sample catalog for existing installs
+  // (e.g. after adding photos to the seed data).
+  seeded: 'tso.seeded.v2',
 };
 
 async function readJSON<T>(key: string, fallback: T): Promise<T> {

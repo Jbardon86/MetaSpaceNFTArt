@@ -146,15 +146,18 @@ function EditorForm({
       {/* Photo */}
       <Text style={styles.photoLabel}>Photo</Text>
       <View style={styles.photoRow}>
-        {imageUri ? (
-          <Image source={{ uri: imageUri }} style={styles.photoPreview} resizeMode="cover" />
-        ) : (
-          <View style={[styles.photoPreview, styles.photoPlaceholder]}>
-            <Text style={{ fontSize: 28 }}>🖼️</Text>
-          </View>
-        )}
+        <Pressable onPress={pickPhoto}>
+          {imageUri ? (
+            <Image source={{ uri: imageUri }} style={styles.photoPreview} resizeMode="cover" />
+          ) : (
+            <View style={[styles.photoPreview, styles.photoPlaceholder]}>
+              <Text style={{ fontSize: 26 }}>📷</Text>
+              <Text style={styles.photoHint}>Tap to add</Text>
+            </View>
+          )}
+        </Pressable>
         <View style={{ flex: 1, marginLeft: spacing.md }}>
-          <Button title={imageUri ? 'Change photo' : 'Add photo'} variant="secondary" onPress={pickPhoto} />
+          <Button title={imageUri ? 'Change photo' : 'Choose photo'} variant="secondary" onPress={pickPhoto} />
           {imageUri ? (
             <>
               <View style={{ height: spacing.sm }} />
@@ -229,5 +232,12 @@ const styles = StyleSheet.create({
   },
   photoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.lg },
   photoPreview: { width: 84, height: 84, borderRadius: radius.md, backgroundColor: colors.bg },
-  photoPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  photoPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: colors.border,
+  },
+  photoHint: { fontSize: font.small, color: colors.textMuted, marginTop: 2 },
 });
