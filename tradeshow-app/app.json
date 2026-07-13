@@ -2,16 +2,22 @@
   "expo": {
     "name": "Endless Fun Orders",
     "slug": "tradeshow-app",
+    "owner": "jbardon86",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "extra": {
+      "eas": {
+        "projectId": "76077277-710e-4598-895d-c89d2324c4d0"
+      }
+    },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "biz.endlessfun.orders"
+      "bundleIdentifier": "com.jbardon86.tradeshowapp"
     },
     "android": {
-      "package": "biz.endlessfun.orders",
+      "package": "com.jbardon86.tradeshowapp",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
