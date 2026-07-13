@@ -7,7 +7,7 @@
 
 export const brand = {
   /** Company name shown throughout. */
-  companyName: 'MetaSpace',
+  companyName: 'Endless Fun',
 
   /** Logo on the welcome screen. Either an emoji, a require('../assets/logo.png'),
    *  or a { uri: 'https://…' } remote image. Set `logoImage` to use an image. */
@@ -15,11 +15,11 @@ export const brand = {
   logoImage: null as null | number | { uri: string },
 
   // ---- Welcome screen (what the customer sees first) ----
-  welcomeTitle: 'Welcome to MetaSpace',
-  welcomeSubtitle: 'Browse our collection and place your order',
+  welcomeTitle: 'Welcome to Endless Fun',
+  welcomeSubtitle: 'Browse our products and place your order',
   /** Short "about us" blurb shown on the welcome screen. */
   aboutText:
-    'MetaSpace creates premium prints, canvases, and collectibles bridging digital art and the physical world. Tap below to start your order — a team member will follow up to finalize the details.',
+    'Thanks for stopping by the Endless Fun booth! Browse our products below and place your order right here — a team member will follow up to finalize the details.',
 
   // ---- Order attribution ----
   /** Label stored on each order (which booth/kiosk it came from). */
