@@ -7,6 +7,10 @@
     "orientation": "portrait",
     "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "light",
+    "runtimeVersion": { "policy": "appVersion" },
+    "updates": {
+      "url": "https://u.expo.dev/76077277-710e-4598-895d-c89d2324c4d0"
+    },
     "extra": {
       "eas": {
         "projectId": "76077277-710e-4598-895d-c89d2324c4d0"
