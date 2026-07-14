@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Field } from '../components/ui';
 import { useApp } from '../store/AppContext';
@@ -47,6 +47,14 @@ export default function DetailsScreen({ navigation }: ScreenProps<'Details'>) {
           <Field label="Company (optional)" value={company} onChangeText={setCompany} placeholder="Company / gallery name" autoCapitalize="words" />
           <Field label="Email" value={email} onChangeText={setEmail} placeholder="you@example.com" keyboardType="email-address" autoCapitalize="none" />
           <Field label="Phone" value={phone} onChangeText={setPhone} placeholder="(555) 123-4567" keyboardType="phone-pad" />
+
+          <View style={styles.optInRow}>
+            <View style={{ flex: 1, marginRight: spacing.md }}>
+              <Text style={styles.optInLabel}>Email me my confirmation</Text>
+              <Text style={styles.optInSub}>We'll send a receipt to your email.</Text>
+            </View>
+            <Switch value={draft.emailConfirmation} onValueChange={draft.setEmailConfirmation} />
+          </View>
         </Card>
       </ScrollView>
 
@@ -60,6 +68,15 @@ export default function DetailsScreen({ navigation }: ScreenProps<'Details'>) {
 const styles = StyleSheet.create({
   heading: { fontSize: font.h1, fontWeight: '800', color: colors.text },
   sub: { fontSize: font.body, color: colors.textMuted, marginTop: spacing.xs },
+  optInRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: spacing.md,
+  },
+  optInLabel: { fontSize: font.body, fontWeight: '600', color: colors.text },
+  optInSub: { fontSize: font.small, color: colors.textMuted, marginTop: 2 },
   footer: {
     position: 'absolute',
     left: 0,

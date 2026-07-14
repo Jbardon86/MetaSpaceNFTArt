@@ -19,12 +19,15 @@ const BACKEND_URL = ''; // e.g. 'https://your-proxy.example.com'
 /** Shape the app sends to the backend; backend maps this to Order + OrderItem. */
 function toSalesforceOrderPayload(order: Order) {
   return {
+    id: order.id,
     account: { name: order.customer.company, salesforceId: order.customer.salesforceId },
     contact: {
       name: order.customer.name,
       email: order.customer.email,
       phone: order.customer.phone,
     },
+    emailConfirmation: order.emailConfirmation ?? false,
+    signature: order.signature ?? null,
     eventName: order.eventName,
     repName: order.repName,
     notes: order.notes,

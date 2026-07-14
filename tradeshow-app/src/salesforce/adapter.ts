@@ -1,4 +1,5 @@
 import { Customer, Order, Product } from '../types';
+import { buildConfirmationEmail } from '../email/confirmation';
 
 // ---------------------------------------------------------------------------
 // SalesforceAdapter is the seam between the app and Salesforce.
@@ -61,6 +62,17 @@ export class MockSalesforceAdapter implements SalesforceAdapter {
     if (this.failureRate > 0 && Math.random() < this.failureRate) {
       throw new Error('Simulated network error — order re-queued.');
     }
+    // In the real backend, this is where the confirmation email is sent from
+    // order@endlessfun.biz. The mock just logs what *would* be sent.
+    if (order.emailConfirmation && order.customer.email) {
+      const email = buildConfirmationEmail(order);
+      console.log('[mock email] would send confirmation:', {
+        from: email.from,
+        to: email.to,
+        subject: email.subject,
+      });
+    }
+
     // Pretend Salesforce returned a fresh 18-char-ish Order Id.
     const fakeId = `801${Math.random().toString(36).slice(2, 12).toUpperCase()}`;
     return { salesforceId: fakeId };

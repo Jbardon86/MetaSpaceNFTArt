@@ -1,0 +1,16 @@
+{
+  "name": "endlessfun-orders-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "Backend for the Endless Fun Orders app: sends order confirmations from order@endlessfun.biz and (Phase 2) pushes orders to Salesforce.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "nodemailer": "^6.9.14"
+  }
+}

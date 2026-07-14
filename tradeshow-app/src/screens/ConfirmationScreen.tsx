@@ -44,6 +44,10 @@ export default function ConfirmationScreen({ route, navigation }: ScreenProps<'C
             <Text style={styles.summaryTotal}>{formatMoney(total)}</Text>
           </View>
         ) : null}
+
+        {order?.emailConfirmation && order.customer.email ? (
+          <Text style={styles.emailNote}>📧 A confirmation is on its way to {order.customer.email}</Text>
+        ) : null}
       </View>
 
       <View style={styles.footer}>
@@ -86,5 +90,11 @@ const styles = StyleSheet.create({
   },
   summaryLine: { fontSize: font.body, color: colors.textMuted },
   summaryTotal: { fontSize: font.h3, fontWeight: '800', color: colors.text },
+  emailNote: {
+    fontSize: font.body,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.lg,
+  },
   footer: {},
 });

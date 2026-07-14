@@ -8,6 +8,8 @@ interface DraftState {
   customer: Customer | null;
   lines: OrderLine[];
   notes: string;
+  emailConfirmation: boolean;
+  setEmailConfirmation: (v: boolean) => void;
   setCustomer: (c: Customer | null) => void;
   addProduct: (p: Product) => void;
   setQuantity: (productId: string, qty: number) => void;
@@ -23,6 +25,7 @@ export function OrderDraftProvider({ children }: { children: React.ReactNode }) 
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [lines, setLines] = useState<OrderLine[]>([]);
   const [notes, setNotes] = useState('');
+  const [emailConfirmation, setEmailConfirmation] = useState(true);
 
   const addProduct = useCallback((p: Product) => {
     setLines((prev) => {
@@ -68,12 +71,15 @@ export function OrderDraftProvider({ children }: { children: React.ReactNode }) 
     setCustomer(null);
     setLines([]);
     setNotes('');
+    setEmailConfirmation(true);
   }, []);
 
   const value: DraftState = {
     customer,
     lines,
     notes,
+    emailConfirmation,
+    setEmailConfirmation,
     setCustomer,
     addProduct,
     setQuantity,

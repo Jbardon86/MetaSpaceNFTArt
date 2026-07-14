@@ -59,6 +59,8 @@ export interface Order {
   notes: string;
   /** Name of the tradeshow / event, for reporting. */
   eventName: string;
+  /** Whether the customer asked for an emailed confirmation. */
+  emailConfirmation?: boolean;
   /** Rep who took the order. */
   repName: string;
   /** Customer's signature (serialized SignatureData JSON), if captured. */
