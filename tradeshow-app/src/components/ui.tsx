@@ -230,8 +230,17 @@ export function ProductImage({
     return (
       <Image
         source={{ uri }}
-        style={{ width: size, height: size, borderRadius: rounded, backgroundColor: colors.bg }}
-        resizeMode="cover"
+        style={{
+          width: size,
+          height: size,
+          borderRadius: rounded,
+          backgroundColor: '#fff',
+          borderWidth: 1,
+          borderColor: colors.border,
+        }}
+        // "contain" shows the whole product (packaged goods, wide photos) rather
+        // than cropping it to a square.
+        resizeMode="contain"
       />
     );
   }

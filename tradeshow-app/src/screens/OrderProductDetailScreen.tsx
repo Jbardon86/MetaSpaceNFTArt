@@ -33,23 +33,30 @@ export default function OrderProductDetailScreen({
 
   return (
     <View style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}>
-        {/* Hero image */}
-        <View style={styles.hero}>
+      <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 120 }}>
+        {/* Framed hero image — whole product visible, never cropped */}
+        <View style={styles.heroCard}>
           {product.imageUri ? (
-            <Image source={{ uri: product.imageUri }} style={styles.heroImg} resizeMode="cover" />
+            <Image source={{ uri: product.imageUri }} style={styles.heroImg} resizeMode="contain" />
           ) : (
-            <ProductImage uri={null} name={product.name} size={220} rounded={radius.lg} />
+            <ProductImage uri={null} name={product.name} size={200} rounded={radius.lg} />
           )}
         </View>
 
-        <View style={styles.body}>
+        {/* Info card */}
+        <View style={styles.infoCard}>
           <Text style={styles.name}>{product.name}</Text>
-          <Text style={styles.price}>{formatMoney(product.price)}</Text>
-          <Text style={styles.unit}>per {product.unit}{product.sku ? ` · ${product.sku}` : ''}</Text>
+          <View style={styles.priceRow}>
+            <Text style={styles.price}>{formatMoney(product.price)}</Text>
+            <Text style={styles.unit}>
+              per {product.unit}
+              {product.sku ? ` · ${product.sku}` : ''}
+            </Text>
+          </View>
 
           {product.description ? (
             <>
+              <View style={styles.divider} />
               <Text style={styles.sectionLabel}>Description</Text>
               <Text style={styles.description}>{product.description}</Text>
             </>
@@ -89,24 +96,35 @@ export default function OrderProductDetailScreen({
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  hero: {
-    backgroundColor: colors.surface,
+  heroCard: {
+    backgroundColor: '#fff',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: spacing.xl,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
   },
-  heroImg: { width: '86%', height: 300, borderRadius: radius.lg, backgroundColor: colors.bg },
-  body: { padding: spacing.lg },
-  name: { fontSize: font.h1, fontWeight: '800', color: colors.text },
-  price: { fontSize: font.h2, fontWeight: '800', color: colors.primary, marginTop: spacing.sm },
-  unit: { fontSize: font.body, color: colors.textMuted, marginTop: 2 },
+  heroImg: { width: '100%', height: 260 },
+  infoCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+  },
+  name: { fontSize: font.h2, fontWeight: '800', color: colors.text },
+  priceRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: spacing.sm },
+  price: { fontSize: font.h2, fontWeight: '800', color: colors.primary },
+  unit: { fontSize: font.body, color: colors.textMuted, marginLeft: spacing.sm },
+  divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.lg },
   sectionLabel: {
     fontSize: font.small,
     fontWeight: '700',
     color: colors.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginTop: spacing.xl,
     marginBottom: spacing.sm,
   },
   description: { fontSize: font.body, color: colors.text, lineHeight: 24 },
@@ -114,7 +132,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: spacing.xl,
+    marginTop: spacing.lg,
     padding: spacing.md,
     backgroundColor: colors.primarySoft,
     borderRadius: radius.md,
