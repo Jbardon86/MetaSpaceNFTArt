@@ -271,6 +271,36 @@ export function ProductImage({
 }
 
 // ---------------------------------------------------------------------------
+// AutoImage — sizes itself to the image's real aspect ratio so the ENTIRE
+// picture is always visible (never cropped), at full width.
+// ---------------------------------------------------------------------------
+export function AutoImage({ uri, maxHeight = 340 }: { uri: string; maxHeight?: number }) {
+  const [ratio, setRatio] = useState(1.4);
+  useEffect(() => {
+    let mounted = true;
+    Image.getSize(
+      uri,
+      (w, h) => {
+        if (mounted && w > 0 && h > 0) setRatio(w / h);
+      },
+      () => {
+        /* keep default ratio on failure */
+      }
+    );
+    return () => {
+      mounted = false;
+    };
+  }, [uri]);
+  return (
+    <Image
+      source={{ uri }}
+      style={{ width: '100%', aspectRatio: ratio, maxHeight, borderRadius: radius.sm }}
+      resizeMode="contain"
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
 // HighlightChips — little selling-point pills (Gluten Free, Non-GMO, …)
 // ---------------------------------------------------------------------------
 export function HighlightChips({ items }: { items?: string[] }) {

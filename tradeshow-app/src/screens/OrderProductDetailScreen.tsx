@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
-import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AddButton, Button, HighlightChips, ProductImage, QtyStepper } from '../components/ui';
+import { AddButton, AutoImage, Button, HighlightChips, ProductImage, QtyStepper } from '../components/ui';
 import { useApp } from '../store/AppContext';
 import { useDraft } from '../store/OrderDraft';
 import { ScreenProps } from '../navigation';
@@ -37,7 +37,7 @@ export default function OrderProductDetailScreen({
         {/* Framed hero image — whole product visible, never cropped */}
         <View style={styles.heroCard}>
           {product.imageUri ? (
-            <Image source={{ uri: product.imageUri }} style={styles.heroImg} resizeMode="contain" />
+            <AutoImage uri={product.imageUri} maxHeight={360} />
           ) : (
             <ProductImage uri={null} name={product.name} size={200} rounded={radius.lg} />
           )}
