@@ -13,7 +13,7 @@ const KEYS = {
   session: 'tso.session',
   // Bump this version to re-seed the sample catalog for existing installs
   // (e.g. after adding photos to the seed data).
-  seeded: 'tso.seeded.v2',
+  seeded: 'tso.seeded.v3',
 };
 
 async function readJSON<T>(key: string, fallback: T): Promise<T> {

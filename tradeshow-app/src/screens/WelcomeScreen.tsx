@@ -41,11 +41,13 @@ export default function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
         </Pressable>
 
         <View style={styles.hero}>
-          {brand.logoImage ? (
-            <Image source={brand.logoImage} style={styles.logoImg} resizeMode="contain" />
-          ) : (
-            <Text style={styles.logo}>{brand.logoEmoji}</Text>
-          )}
+          <View style={styles.logoBadge}>
+            {brand.logoImage ? (
+              <Image source={brand.logoImage} style={styles.logoImg} resizeMode="contain" />
+            ) : (
+              <Text style={styles.logo}>{brand.logoEmoji}</Text>
+            )}
+          </View>
           <Text style={styles.title}>{brand.welcomeTitle}</Text>
           <Text style={styles.subtitle}>{brand.welcomeSubtitle}</Text>
         </View>
@@ -54,6 +56,7 @@ export default function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
           <Text style={styles.about}>{brand.aboutText}</Text>
           <View style={{ height: spacing.xl }} />
           <Button title="Start your order" onPress={start} />
+          <Text style={styles.footnote}>Powered by {brand.companyName}</Text>
         </View>
       </ScrollView>
 
@@ -132,12 +135,37 @@ const styles = StyleSheet.create({
   },
   staffText: { color: '#ffffff99', fontSize: font.small, fontWeight: '600' },
   hero: { alignItems: 'center', marginBottom: spacing.xxl },
-  logo: { fontSize: 72, marginBottom: spacing.md },
-  logoImg: { width: 120, height: 120, marginBottom: spacing.md },
+  logoBadge: {
+    width: 116,
+    height: 116,
+    borderRadius: 28,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  logo: { fontSize: 60 },
+  logoImg: { width: 92, height: 92 },
   title: { fontSize: font.h1, fontWeight: '800', color: '#fff', textAlign: 'center' },
-  subtitle: { fontSize: font.h3, color: '#DBEAFE', marginTop: spacing.sm, textAlign: 'center' },
+  subtitle: {
+    fontSize: font.h3,
+    color: '#ffffffcc',
+    marginTop: spacing.sm,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
   card: { backgroundColor: colors.surface, borderRadius: 24, padding: spacing.xl },
   about: { fontSize: font.body, color: colors.text, lineHeight: 24, textAlign: 'center' },
+  footnote: {
+    fontSize: font.small,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.lg,
+  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: '#0009',
