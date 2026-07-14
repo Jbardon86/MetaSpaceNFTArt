@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Animated,
   Image,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -301,6 +302,30 @@ export function AutoImage({ uri, maxHeight = 340 }: { uri: string; maxHeight?: n
 }
 
 // ---------------------------------------------------------------------------
+// ImageLightbox — full-screen image viewer. Tap the image (or the X) to close.
+// ---------------------------------------------------------------------------
+export function ImageLightbox({
+  uri,
+  visible,
+  onClose,
+}: {
+  uri: string;
+  visible: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.lightboxBackdrop} onPress={onClose}>
+        <Image source={{ uri }} style={styles.lightboxImg} resizeMode="contain" />
+        <Pressable style={styles.lightboxClose} onPress={onClose} hitSlop={16}>
+          <Text style={styles.lightboxCloseText}>✕</Text>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // HighlightChips — little selling-point pills (Gluten Free, Non-GMO, …)
 // ---------------------------------------------------------------------------
 export function HighlightChips({ items }: { items?: string[] }) {
@@ -450,6 +475,26 @@ const styles = StyleSheet.create({
   },
   dot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
   badgeText: { fontSize: font.small, fontWeight: '700' },
+  lightboxBackdrop: {
+    flex: 1,
+    backgroundColor: '#000000ee',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  lightboxImg: { width: '100%', height: '100%' },
+  lightboxClose: {
+    position: 'absolute',
+    top: 48,
+    right: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#ffffff22',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lightboxCloseText: { color: '#fff', fontSize: 22, fontWeight: '700' },
   chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
     backgroundColor: colors.primarySoft,

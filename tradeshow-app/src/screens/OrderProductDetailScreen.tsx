@@ -1,7 +1,15 @@
-import { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AddButton, AutoImage, Button, HighlightChips, ProductImage, QtyStepper } from '../components/ui';
+import {
+  AddButton,
+  AutoImage,
+  Button,
+  HighlightChips,
+  ImageLightbox,
+  ProductImage,
+  QtyStepper,
+} from '../components/ui';
 import { useApp } from '../store/AppContext';
 import { useDraft } from '../store/OrderDraft';
 import { ScreenProps } from '../navigation';
@@ -30,18 +38,24 @@ export default function OrderProductDetailScreen({
   }
 
   const qty = draft.lines.find((l) => l.productId === product.id)?.quantity ?? 0;
+  const [zoom, setZoom] = useState(false);
 
   return (
     <View style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 120 }}>
-        {/* Framed hero image — whole product visible, never cropped */}
-        <View style={styles.heroCard}>
+        {/* Framed hero image — tap to view full screen */}
+        <Pressable style={styles.heroCard} onPress={() => product.imageUri && setZoom(true)}>
           {product.imageUri ? (
-            <AutoImage uri={product.imageUri} maxHeight={360} />
+            <>
+              <AutoImage uri={product.imageUri} maxHeight={360} />
+              <View style={styles.zoomHint}>
+                <Text style={styles.zoomHintText}>⤢ Tap to zoom</Text>
+              </View>
+            </>
           ) : (
             <ProductImage uri={null} name={product.name} size={200} rounded={radius.lg} />
           )}
-        </View>
+        </Pressable>
 
         {/* Info card */}
         <View style={styles.infoCard}>
@@ -96,6 +110,10 @@ export default function OrderProductDetailScreen({
           <Button title="View cart" onPress={() => navigation.navigate('OrderReview')} />
         )}
       </View>
+
+      {product.imageUri ? (
+        <ImageLightbox uri={product.imageUri} visible={zoom} onClose={() => setZoom(false)} />
+      ) : null}
     </View>
   );
 }
@@ -113,6 +131,16 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   heroImg: { width: '100%', height: 260 },
+  zoomHint: {
+    position: 'absolute',
+    bottom: spacing.sm,
+    right: spacing.sm,
+    backgroundColor: '#00000088',
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+  },
+  zoomHintText: { color: '#fff', fontSize: font.small, fontWeight: '600' },
   infoCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
