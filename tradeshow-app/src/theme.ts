@@ -4,9 +4,9 @@ import { Platform, ViewStyle } from 'react-native';
 // Tuned to feel like a native iOS app.
 
 export const colors = {
-  primary: '#007AFF', // iOS system blue
-  primaryDark: '#0062CC',
-  primarySoft: '#E9F2FF',
+  primary: '#0091D5', // Milk Magic blue
+  primaryDark: '#0073AA',
+  primarySoft: '#E3F3FB',
   bg: '#F2F2F7', // iOS grouped background
   surface: '#FFFFFF',
   border: '#E5E5EA', // iOS separator

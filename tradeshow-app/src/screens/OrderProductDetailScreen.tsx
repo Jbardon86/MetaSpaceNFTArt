@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AddButton, Button, ProductImage, QtyStepper } from '../components/ui';
+import { AddButton, Button, HighlightChips, ProductImage, QtyStepper } from '../components/ui';
 import { useApp } from '../store/AppContext';
 import { useDraft } from '../store/OrderDraft';
 import { ScreenProps } from '../navigation';
@@ -53,6 +53,12 @@ export default function OrderProductDetailScreen({
               {product.sku ? ` · ${product.sku}` : ''}
             </Text>
           </View>
+
+          {product.highlights && product.highlights.length > 0 ? (
+            <View style={{ marginTop: spacing.md }}>
+              <HighlightChips items={product.highlights} />
+            </View>
+          ) : null}
 
           {product.description ? (
             <>

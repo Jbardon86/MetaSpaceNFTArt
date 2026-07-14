@@ -271,6 +271,22 @@ export function ProductImage({
 }
 
 // ---------------------------------------------------------------------------
+// HighlightChips — little selling-point pills (Gluten Free, Non-GMO, …)
+// ---------------------------------------------------------------------------
+export function HighlightChips({ items }: { items?: string[] }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <View style={styles.chipsWrap}>
+      {items.map((t, i) => (
+        <View key={`${t}-${i}`} style={styles.chip}>
+          <Text style={styles.chipText}>{t}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Field / Card / Badge / EmptyState
 // ---------------------------------------------------------------------------
 export function Field({ label, ...props }: { label: string } & TextInputProps) {
@@ -404,6 +420,14 @@ const styles = StyleSheet.create({
   },
   dot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
   badgeText: { fontSize: font.small, fontWeight: '700' },
+  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chip: {
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+  },
+  chipText: { color: colors.primaryDark, fontWeight: '700', fontSize: font.small },
   empty: { alignItems: 'center', padding: spacing.xxl },
   emptyEmoji: { fontSize: 48, marginBottom: spacing.md },
   emptyTitle: { fontSize: font.h3, fontWeight: '700', color: colors.text },

@@ -99,6 +99,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             unit: p.unit ?? 'each',
             active: p.active ?? true,
             description: p.description ?? '',
+            highlights: p.highlights ?? [],
             imageUri: p.imageUri ?? null,
             salesforceId: null,
           };

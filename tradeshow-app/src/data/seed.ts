@@ -12,6 +12,7 @@ export function seedProducts(): Product[] {
       price: 100,
       unit: 'each',
       description: 'This is a sample. Edit it or add your own products in the Catalog.',
+      highlights: ['Gluten Free', 'Non-GMO', 'BPA Free'],
     },
     {
       name: 'Sample Product 2',

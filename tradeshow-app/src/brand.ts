@@ -33,5 +33,5 @@ export const brand = {
   staffPin: '5680',
 
   /** Your brand color. Keep in sync with colors.primary in theme.ts. */
-  brandColor: '#007AFF',
+  brandColor: '#0091D5',
 };

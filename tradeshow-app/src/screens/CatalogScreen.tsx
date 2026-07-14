@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Card, Field, ProductImage } from '../components/ui';
+import { Button, Card, Field, HighlightChips, ProductImage } from '../components/ui';
 import { useApp } from '../store/AppContext';
 import { ScreenProps } from '../navigation';
 import { formatMoney, Product } from '../types';
@@ -108,7 +108,13 @@ function EditorForm({
   const [price, setPrice] = useState(existing ? String(existing.price) : '');
   const [unit, setUnit] = useState(existing?.unit ?? 'each');
   const [description, setDescription] = useState(existing?.description ?? '');
+  const [highlights, setHighlights] = useState((existing?.highlights ?? []).join(', '));
   const [imageUri, setImageUri] = useState<string | null>(existing?.imageUri ?? null);
+
+  const parsedHighlights = highlights
+    .split(',')
+    .map((h) => h.trim())
+    .filter(Boolean);
 
   const pickPhoto = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({
@@ -134,6 +140,7 @@ function EditorForm({
       price: parsedPrice,
       unit: unit.trim() || 'each',
       description: description.trim(),
+      highlights: parsedHighlights,
       imageUri,
       active: existing?.active ?? true,
     });
@@ -183,6 +190,17 @@ function EditorForm({
         onChangeText={setDescription}
         placeholder="Short description shown at checkout"
       />
+      <Field
+        label="Highlights (separate with commas)"
+        value={highlights}
+        onChangeText={setHighlights}
+        placeholder="Gluten Free, Non-GMO, BPA Free"
+      />
+      {parsedHighlights.length > 0 ? (
+        <View style={{ marginTop: -spacing.sm, marginBottom: spacing.lg }}>
+          <HighlightChips items={parsedHighlights} />
+        </View>
+      ) : null}
       <Field label="SKU" value={sku} onChangeText={setSku} placeholder="ABC-123" autoCapitalize="characters" />
       <Field label="Price ($)" value={price} onChangeText={setPrice} placeholder="0.00" keyboardType="decimal-pad" />
       <Field label="Unit" value={unit} onChangeText={setUnit} placeholder="each / case / hour" />

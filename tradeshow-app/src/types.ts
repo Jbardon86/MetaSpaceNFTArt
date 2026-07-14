@@ -16,6 +16,8 @@ export interface Product {
   active: boolean;
   /** Short marketing description shown on the product/checkout card. */
   description?: string;
+  /** Short selling-point chips, e.g. ["Gluten Free", "Non-GMO"]. */
+  highlights?: string[];
   /** Product photo — a data URI (picked photo) or an https image URL. */
   imageUri?: string | null;
   /** Salesforce Product2 Id once synced; null until then. */
