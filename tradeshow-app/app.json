@@ -5,7 +5,7 @@
     "owner": "jbardon86",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "light",
     "extra": {
       "eas": {

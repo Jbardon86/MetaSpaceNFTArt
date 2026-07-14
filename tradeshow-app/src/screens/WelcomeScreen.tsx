@@ -29,14 +29,15 @@ export default function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
       >
         <View style={styles.hero}>
           {/* Tap the logo to open the admin number pad. */}
-          <Pressable onPress={() => setPadOpen(true)} style={styles.logoBadge}>
-            {brand.logoImage ? (
-              <Image source={brand.logoImage} style={styles.logoImg} resizeMode="contain" />
-            ) : (
+          {brand.logoImage ? (
+            <Pressable onPress={() => setPadOpen(true)} style={styles.logoTile}>
+              <Image source={brand.logoImage} style={styles.logoTileImg} resizeMode="contain" />
+            </Pressable>
+          ) : (
+            <Pressable onPress={() => setPadOpen(true)} style={styles.logoBadge}>
               <Text style={styles.logo}>{brand.logoEmoji}</Text>
-            )}
-          </Pressable>
-          <Text style={styles.title}>{brand.welcomeTitle}</Text>
+            </Pressable>
+          )}
           <Text style={styles.subtitle}>{brand.welcomeSubtitle}</Text>
         </View>
 
@@ -167,6 +168,20 @@ const KEY_SIZE = 72;
 const styles = StyleSheet.create({
   container: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.xl },
   hero: { alignItems: 'center', marginBottom: spacing.xxl },
+  logoTile: {
+    width: '88%',
+    maxWidth: 340,
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+    marginBottom: spacing.lg,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  logoTileImg: { width: '100%', aspectRatio: 974 / 496 },
   logoBadge: {
     width: 116,
     height: 116,
@@ -181,7 +196,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
   },
   logo: { fontSize: 60 },
-  logoImg: { width: 92, height: 92 },
   title: { fontSize: font.h1, fontWeight: '800', color: '#fff', textAlign: 'center' },
   subtitle: {
     fontSize: font.h3,

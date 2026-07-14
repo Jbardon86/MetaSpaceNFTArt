@@ -12,7 +12,7 @@ export const brand = {
   /** Logo on the welcome screen. Either an emoji, a require('../assets/logo.png'),
    *  or a { uri: 'https://…' } remote image. Set `logoImage` to use an image. */
   logoEmoji: '🎨',
-  logoImage: null as null | number | { uri: string },
+  logoImage: require('../assets/logo-mark.png') as null | number | { uri: string },
 
   // ---- Welcome screen (what the customer sees first) ----
   welcomeTitle: 'Welcome to Endless Fun',
