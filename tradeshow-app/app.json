@@ -18,7 +18,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.jbardon86.tradeshowapp"
+      "bundleIdentifier": "com.jbardon86.tradeshowapp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.jbardon86.tradeshowapp",
