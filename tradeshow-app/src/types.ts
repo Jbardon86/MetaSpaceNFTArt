@@ -61,6 +61,8 @@ export interface Order {
   eventName: string;
   /** Rep who took the order. */
   repName: string;
+  /** Customer's signature (serialized SignatureData JSON), if captured. */
+  signature?: string | null;
   /** ISO timestamp string. */
   createdAt: string;
   status: SyncStatus;

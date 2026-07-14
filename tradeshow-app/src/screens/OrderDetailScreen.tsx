@@ -1,6 +1,7 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Badge, Button, Card, EmptyState, ProductImage } from '../components/ui';
+import { SignatureView } from '../components/SignaturePad';
 import { useApp } from '../store/AppContext';
 import { ScreenProps } from '../navigation';
 import { formatMoney, lineTotal, orderTotal } from '../types';
@@ -69,6 +70,13 @@ export default function OrderDetailScreen({ route }: ScreenProps<'OrderDetail'>)
         <Card style={{ marginBottom: spacing.lg }}>
           <Text style={styles.sectionLabel}>Notes</Text>
           <Text style={styles.body}>{order.notes}</Text>
+        </Card>
+      ) : null}
+
+      {order.signature ? (
+        <Card style={{ marginBottom: spacing.lg }}>
+          <Text style={styles.sectionLabel}>Signature</Text>
+          <SignatureView data={order.signature} />
         </Card>
       ) : null}
 

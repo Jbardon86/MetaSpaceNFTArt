@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar, Button, Card, EmptyState, ProductImage, QtyStepper } from '../components/ui';
+import { SignatureModal } from '../components/SignaturePad';
 import { useApp } from '../store/AppContext';
 import { useDraft } from '../store/OrderDraft';
 import { ScreenProps } from '../navigation';
@@ -24,21 +25,30 @@ export default function OrderReviewScreen({ navigation }: ScreenProps<'OrderRevi
   const draft = useDraft();
   const insets = useSafeAreaInsets();
   const [submitting, setSubmitting] = useState(false);
+  const [signOpen, setSignOpen] = useState(false);
 
   const total = orderTotal(draft.lines);
 
-  const submit = async () => {
+  // Confirm → pop the signature pad → then actually place the order.
+  const confirm = () => {
     if (!draft.customer) {
       Alert.alert('Your details', 'Please add your details before confirming.');
       navigation.navigate('Details');
       return;
     }
+    setSignOpen(true);
+  };
+
+  const placeOrder = async (signature: string) => {
+    setSignOpen(false);
+    if (!draft.customer) return;
     setSubmitting(true);
     try {
       const order = await submitOrder({
         customer: draft.customer,
         lines: draft.lines,
         notes: draft.notes,
+        signature,
       });
       // Go to the thank-you screen; it resets the kiosk for the next customer.
       navigation.reset({
@@ -146,10 +156,16 @@ export default function OrderReviewScreen({ navigation }: ScreenProps<'OrderRevi
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
         <Button
           title={submitting ? 'Submitting…' : `Confirm order · ${formatMoney(total)}`}
-          onPress={submit}
+          onPress={confirm}
           loading={submitting}
         />
       </View>
+
+      <SignatureModal
+        visible={signOpen}
+        onCancel={() => setSignOpen(false)}
+        onConfirm={placeOrder}
+      />
     </KeyboardAvoidingView>
   );
 }
