@@ -5,7 +5,53 @@ import { Button, Card, Field } from '../components/ui';
 import { useApp } from '../store/AppContext';
 import { useDraft } from '../store/OrderDraft';
 import { ScreenProps } from '../navigation';
+import { Address } from '../types';
 import { colors, font, spacing } from '../theme';
+
+// Reusable street/city/state/zip inputs for ship-to and bill-to.
+function AddressFields({
+  value,
+  onChange,
+}: {
+  value: Address;
+  onChange: (patch: Partial<Address>) => void;
+}) {
+  return (
+    <>
+      <Field
+        label="Street address"
+        value={value.street}
+        onChangeText={(t) => onChange({ street: t })}
+        placeholder="123 Main St"
+      />
+      <View style={{ flexDirection: 'row', gap: spacing.md }}>
+        <View style={{ flex: 2 }}>
+          <Field label="City" value={value.city} onChangeText={(t) => onChange({ city: t })} placeholder="City" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Field
+            label="State"
+            value={value.state}
+            onChangeText={(t) => onChange({ state: t })}
+            placeholder="ST"
+            autoCapitalize="characters"
+            maxLength={2}
+          />
+        </View>
+        <View style={{ flex: 1.2 }}>
+          <Field
+            label="ZIP"
+            value={value.zip}
+            onChangeText={(t) => onChange({ zip: t })}
+            placeholder="00000"
+            keyboardType="number-pad"
+            maxLength={10}
+          />
+        </View>
+      </View>
+    </>
+  );
+}
 
 // Customer enters their own details. Deliberately a plain form — no search of
 // existing customers, so no one sees anyone else's information.
@@ -56,6 +102,24 @@ export default function DetailsScreen({ navigation }: ScreenProps<'Details'>) {
             <Switch value={draft.emailConfirmation} onValueChange={draft.setEmailConfirmation} />
           </View>
         </Card>
+
+        <Text style={styles.sectionHeading}>Shipping address</Text>
+        <Card>
+          <AddressFields value={draft.shipTo} onChange={draft.updateShipTo} />
+        </Card>
+
+        <Text style={styles.sectionHeading}>Billing address</Text>
+        <Card>
+          <View style={styles.sameRow}>
+            <Text style={styles.optInLabel}>Same as shipping</Text>
+            <Switch value={draft.billSameAsShip} onValueChange={draft.setBillSameAsShip} />
+          </View>
+          {!draft.billSameAsShip ? (
+            <View style={{ marginTop: spacing.lg }}>
+              <AddressFields value={draft.billTo} onChange={draft.updateBillTo} />
+            </View>
+          ) : null}
+        </Card>
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
@@ -68,6 +132,14 @@ export default function DetailsScreen({ navigation }: ScreenProps<'Details'>) {
 const styles = StyleSheet.create({
   heading: { fontSize: font.h1, fontWeight: '800', color: colors.text },
   sub: { fontSize: font.body, color: colors.textMuted, marginTop: spacing.xs },
+  sectionHeading: {
+    fontSize: font.h3,
+    fontWeight: '800',
+    color: colors.text,
+    marginTop: spacing.xl,
+    marginBottom: spacing.sm,
+  },
+  sameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   optInRow: {
     flexDirection: 'row',
     alignItems: 'center',

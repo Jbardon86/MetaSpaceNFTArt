@@ -39,6 +39,12 @@ const transporter = nodemailer.createTransport({
 function money(n) {
   return `$${Number(n).toFixed(2)}`;
 }
+function formatShipTo(a) {
+  if (!a || !(a.street || a.city || a.zip)) return '';
+  const line2 = [a.city, a.state].filter(Boolean).join(', ');
+  const addr = [a.street, [line2, a.zip].filter(Boolean).join(' ')].filter(Boolean).join('<br>');
+  return `<p style="font-weight:700;margin:0 0 4px">Ship to</p><p style="margin:0 0 16px">${addr}</p>`;
+}
 function buildConfirmationEmail(order) {
   const total = order.lines.reduce((s, l) => s + l.lineTotal, 0);
   const firstName = (order.contact?.name || 'there').split(' ')[0];
@@ -59,6 +65,7 @@ function buildConfirmationEmail(order) {
         <tr><td style="padding:12px 0 0;border-top:1px solid #E5E5EA;font-weight:700">Total</td>
         <td style="padding:12px 0 0;border-top:1px solid #E5E5EA;text-align:right;font-weight:700">${money(total)}</td></tr>
       </table>
+      ${formatShipTo(order.shippingAddress)}
       <p>A team member will follow up to finalize the details.</p>
     </div>`;
   return {

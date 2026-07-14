@@ -1,5 +1,5 @@
 import { brand } from '../brand';
-import { formatMoney, lineTotal, Order, orderTotal } from '../types';
+import { formatAddress, formatMoney, hasAddress, lineTotal, Order, orderTotal } from '../types';
 
 // Builds the customer order-confirmation email. Shared so the app can preview
 // it and the backend can send the exact same content from order@endlessfun.biz.
@@ -32,6 +32,9 @@ export function buildConfirmationEmail(order: Order): EmailMessage {
     lineText,
     ``,
     `Total: ${formatMoney(total)}`,
+    hasAddress(order.shippingAddress)
+      ? `\nShip to:\n${formatAddress(order.shippingAddress)}`
+      : ``,
     order.notes ? `\nNotes: ${order.notes}` : ``,
     ``,
     `A team member will follow up to finalize the details.`,
@@ -61,6 +64,11 @@ export function buildConfirmationEmail(order: Order): EmailMessage {
         <td style="padding:12px 0 0;border-top:1px solid #E5E5EA;text-align:right;font-weight:700;">${formatMoney(total)}</td>
       </tr>
     </table>
+    ${
+      hasAddress(order.shippingAddress)
+        ? `<p style="margin:0 0 4px;font-weight:700;">Ship to</p><p style="margin:0 0 16px;white-space:pre-line;color:#1C1C1E;">${escapeHtml(formatAddress(order.shippingAddress))}</p>`
+        : ''
+    }
     ${order.notes ? `<p style="color:#8E8E93;">Notes: ${escapeHtml(order.notes)}</p>` : ''}
     <p>A team member will follow up to finalize the details.</p>
     <p style="color:#8E8E93;font-size:13px;margin-top:24px;">Sent by ${brand.companyName} · ${CONFIRMATION_FROM}</p>

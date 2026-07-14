@@ -28,6 +28,8 @@ function toSalesforceOrderPayload(order: Order) {
     },
     emailConfirmation: order.emailConfirmation ?? false,
     signature: order.signature ?? null,
+    shippingAddress: order.shippingAddress ?? null,
+    billingAddress: order.billingAddress ?? null,
     eventName: order.eventName,
     repName: order.repName,
     notes: order.notes,

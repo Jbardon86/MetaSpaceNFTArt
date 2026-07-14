@@ -4,7 +4,7 @@ import { Badge, Button, Card, EmptyState, ProductImage } from '../components/ui'
 import { SignatureView } from '../components/SignaturePad';
 import { useApp } from '../store/AppContext';
 import { ScreenProps } from '../navigation';
-import { formatMoney, lineTotal, orderTotal } from '../types';
+import { formatAddress, formatMoney, hasAddress, lineTotal, orderTotal } from '../types';
 import { colors, font, spacing, statusMeta } from '../theme';
 
 export default function OrderDetailScreen({ route }: ScreenProps<'OrderDetail'>) {
@@ -44,6 +44,23 @@ export default function OrderDetailScreen({ route }: ScreenProps<'OrderDetail'>)
         {order.customer.email ? <Text style={styles.sub}>{order.customer.email}</Text> : null}
         {order.customer.phone ? <Text style={styles.sub}>{order.customer.phone}</Text> : null}
       </Card>
+
+      {hasAddress(order.shippingAddress) || hasAddress(order.billingAddress) ? (
+        <Card style={{ marginBottom: spacing.lg }}>
+          {hasAddress(order.shippingAddress) ? (
+            <>
+              <Text style={styles.sectionLabel}>Ship to</Text>
+              <Text style={styles.body}>{formatAddress(order.shippingAddress)}</Text>
+            </>
+          ) : null}
+          {hasAddress(order.billingAddress) ? (
+            <>
+              <Text style={[styles.sectionLabel, { marginTop: spacing.md }]}>Bill to</Text>
+              <Text style={styles.body}>{formatAddress(order.billingAddress)}</Text>
+            </>
+          ) : null}
+        </Card>
+      ) : null}
 
       <Card style={{ marginBottom: spacing.lg }}>
         <Text style={styles.sectionLabel}>Items</Text>

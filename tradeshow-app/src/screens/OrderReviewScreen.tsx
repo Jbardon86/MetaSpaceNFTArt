@@ -50,6 +50,8 @@ export default function OrderReviewScreen({ navigation }: ScreenProps<'OrderRevi
         notes: draft.notes,
         signature,
         emailConfirmation: draft.emailConfirmation && !!draft.customer.email,
+        shippingAddress: draft.shipTo,
+        billingAddress: draft.billSameAsShip ? draft.shipTo : draft.billTo,
       });
       // Go to the thank-you screen; it resets the kiosk for the next customer.
       navigation.reset({

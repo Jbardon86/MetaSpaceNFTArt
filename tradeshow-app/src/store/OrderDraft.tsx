@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useState } from 'react';
-import { Customer, OrderLine, Product } from '../types';
+import { Address, Customer, emptyAddress, OrderLine, Product } from '../types';
 
 // Holds the in-progress order as the rep moves Customer -> Products -> Review.
 // Reset when a new order starts or an order is submitted.
@@ -10,6 +10,12 @@ interface DraftState {
   notes: string;
   emailConfirmation: boolean;
   setEmailConfirmation: (v: boolean) => void;
+  shipTo: Address;
+  billTo: Address;
+  billSameAsShip: boolean;
+  updateShipTo: (patch: Partial<Address>) => void;
+  updateBillTo: (patch: Partial<Address>) => void;
+  setBillSameAsShip: (v: boolean) => void;
   setCustomer: (c: Customer | null) => void;
   addProduct: (p: Product) => void;
   setQuantity: (productId: string, qty: number) => void;
@@ -26,6 +32,16 @@ export function OrderDraftProvider({ children }: { children: React.ReactNode }) 
   const [lines, setLines] = useState<OrderLine[]>([]);
   const [notes, setNotes] = useState('');
   const [emailConfirmation, setEmailConfirmation] = useState(true);
+  const [shipTo, setShipTo] = useState<Address>(emptyAddress());
+  const [billTo, setBillTo] = useState<Address>(emptyAddress());
+  const [billSameAsShip, setBillSameAsShip] = useState(true);
+
+  const updateShipTo = useCallback((patch: Partial<Address>) => {
+    setShipTo((a) => ({ ...a, ...patch }));
+  }, []);
+  const updateBillTo = useCallback((patch: Partial<Address>) => {
+    setBillTo((a) => ({ ...a, ...patch }));
+  }, []);
 
   const addProduct = useCallback((p: Product) => {
     setLines((prev) => {
@@ -72,6 +88,9 @@ export function OrderDraftProvider({ children }: { children: React.ReactNode }) 
     setLines([]);
     setNotes('');
     setEmailConfirmation(true);
+    setShipTo(emptyAddress());
+    setBillTo(emptyAddress());
+    setBillSameAsShip(true);
   }, []);
 
   const value: DraftState = {
@@ -80,6 +99,12 @@ export function OrderDraftProvider({ children }: { children: React.ReactNode }) 
     notes,
     emailConfirmation,
     setEmailConfirmation,
+    shipTo,
+    billTo,
+    billSameAsShip,
+    updateShipTo,
+    updateBillTo,
+    setBillSameAsShip,
     setCustomer,
     addProduct,
     setQuantity,

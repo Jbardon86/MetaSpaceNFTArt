@@ -4,6 +4,28 @@
 
 export type ID = string;
 
+/** A mailing address (ship-to / bill-to). */
+export interface Address {
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+}
+
+export function emptyAddress(): Address {
+  return { street: '', city: '', state: '', zip: '' };
+}
+
+export function hasAddress(a?: Address | null): boolean {
+  return !!a && (a.street.trim() !== '' || a.city.trim() !== '' || a.zip.trim() !== '');
+}
+
+export function formatAddress(a?: Address | null): string {
+  if (!a) return '';
+  const line2 = [a.city, a.state].filter(Boolean).join(', ');
+  return [a.street, [line2, a.zip].filter(Boolean).join(' ')].filter(Boolean).join('\n');
+}
+
 /** A product a rep can add to an order. Managed in-app via the Catalog screen. */
 export interface Product {
   id: ID;
@@ -61,6 +83,10 @@ export interface Order {
   eventName: string;
   /** Whether the customer asked for an emailed confirmation. */
   emailConfirmation?: boolean;
+  /** Where the order ships to. */
+  shippingAddress?: Address | null;
+  /** Where the order bills to (may equal shippingAddress). */
+  billingAddress?: Address | null;
   /** Rep who took the order. */
   repName: string;
   /** Customer's signature (serialized SignatureData JSON), if captured. */
