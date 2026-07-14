@@ -1,26 +1,18 @@
 import { useState } from 'react';
-import {
-  Image,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button } from '../components/ui';
+import { Button, PressableScale } from '../components/ui';
 import { useDraft } from '../store/OrderDraft';
 import { ScreenProps } from '../navigation';
 import { brand } from '../brand';
 import { colors, font, radius, spacing } from '../theme';
 
 // The kiosk landing screen. Customer picks up the iPad and sees this.
+// Staff tap the logo to open the admin number pad.
 export default function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
   const draft = useDraft();
   const insets = useSafeAreaInsets();
-  const [pinOpen, setPinOpen] = useState(false);
+  const [padOpen, setPadOpen] = useState(false);
 
   const start = () => {
     draft.reset();
@@ -35,19 +27,15 @@ export default function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
           { paddingTop: insets.top + spacing.xxl, paddingBottom: insets.bottom + spacing.xl },
         ]}
       >
-        {/* Discreet staff access, top-right */}
-        <Pressable style={styles.staffBtn} onPress={() => setPinOpen(true)} hitSlop={16}>
-          <Text style={styles.staffText}>Staff</Text>
-        </Pressable>
-
         <View style={styles.hero}>
-          <View style={styles.logoBadge}>
+          {/* Tap the logo to open the admin number pad. */}
+          <Pressable onPress={() => setPadOpen(true)} style={styles.logoBadge}>
             {brand.logoImage ? (
               <Image source={brand.logoImage} style={styles.logoImg} resizeMode="contain" />
             ) : (
               <Text style={styles.logo}>{brand.logoEmoji}</Text>
             )}
-          </View>
+          </Pressable>
           <Text style={styles.title}>{brand.welcomeTitle}</Text>
           <Text style={styles.subtitle}>{brand.welcomeSubtitle}</Text>
         </View>
@@ -60,11 +48,11 @@ export default function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
         </View>
       </ScrollView>
 
-      <StaffPinModal
-        visible={pinOpen}
-        onClose={() => setPinOpen(false)}
+      <AdminKeypadModal
+        visible={padOpen}
+        onClose={() => setPadOpen(false)}
         onSuccess={() => {
-          setPinOpen(false);
+          setPadOpen(false);
           navigation.navigate('Staff');
         }}
       />
@@ -72,7 +60,8 @@ export default function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
   );
 }
 
-function StaffPinModal({
+// On-screen number pad for admin access.
+function AdminKeypadModal({
   visible,
   onClose,
   onSuccess,
@@ -81,59 +70,102 @@ function StaffPinModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const [pin, setPin] = useState('');
+  const [entry, setEntry] = useState('');
   const [error, setError] = useState(false);
+  const codeLength = brand.staffPin.length;
 
-  const submit = () => {
-    if (pin === brand.staffPin) {
-      setPin('');
-      setError(false);
-      onSuccess();
-    } else {
-      setError(true);
+  const reset = () => {
+    setEntry('');
+    setError(false);
+  };
+
+  const press = (digit: string) => {
+    if (entry.length >= codeLength) return;
+    const next = entry + digit;
+    setError(false);
+    setEntry(next);
+    if (next.length === codeLength) {
+      // Validate once the full code is entered.
+      if (next === brand.staffPin) {
+        setTimeout(() => {
+          reset();
+          onSuccess();
+        }, 120);
+      } else {
+        setTimeout(() => {
+          setError(true);
+          setEntry('');
+        }, 120);
+      }
     }
   };
 
+  const backspace = () => {
+    setError(false);
+    setEntry((e) => e.slice(0, -1));
+  };
+
+  const close = () => {
+    reset();
+    onClose();
+  };
+
+  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
+
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.modalBackdrop} onPress={onClose}>
-        <Pressable style={styles.pinCard} onPress={() => {}}>
-          <Text style={styles.pinTitle}>Staff access</Text>
-          <Text style={styles.pinSub}>Enter the staff PIN</Text>
-          <TextInput
-            value={pin}
-            onChangeText={(t) => {
-              setPin(t);
-              setError(false);
-            }}
-            placeholder="••••"
-            placeholderTextColor={colors.textMuted}
-            keyboardType="number-pad"
-            secureTextEntry
-            style={[styles.pinInput, error && { borderColor: colors.danger }]}
-            autoFocus
-            maxLength={8}
-          />
-          {error ? <Text style={styles.pinError}>Incorrect PIN</Text> : null}
-          <View style={{ height: spacing.md }} />
-          <Button title="Enter" onPress={submit} disabled={pin.length === 0} />
-          <View style={{ height: spacing.sm }} />
-          <Button title="Cancel" variant="ghost" onPress={onClose} />
-        </Pressable>
-      </Pressable>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
+      <View style={styles.modalBackdrop}>
+        <View style={styles.padCard}>
+          <Text style={styles.padTitle}>Admin access</Text>
+          <Text style={[styles.padSub, error && { color: colors.danger }]}>
+            {error ? 'Incorrect code — try again' : 'Enter your code'}
+          </Text>
+
+          {/* Progress dots */}
+          <View style={styles.dotsRow}>
+            {Array.from({ length: codeLength }).map((_, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.dot,
+                  i < entry.length && styles.dotFilled,
+                  error && { borderColor: colors.danger },
+                ]}
+              />
+            ))}
+          </View>
+
+          {/* Number grid */}
+          <View style={styles.grid}>
+            {keys.map((k) => (
+              <Key key={k} label={k} onPress={() => press(k)} />
+            ))}
+            <View style={styles.keyEmpty} />
+            <Key label="0" onPress={() => press('0')} />
+            <Key label="⌫" onPress={backspace} muted />
+          </View>
+
+          <Button title="Cancel" variant="ghost" onPress={close} />
+        </View>
+      </View>
     </Modal>
   );
 }
 
+function Key({ label, onPress, muted }: { label: string; onPress: () => void; muted?: boolean }) {
+  return (
+    <PressableScale onPress={onPress} scaleTo={0.9} style={styles.key}>
+      <Text style={[styles.keyText, muted && { color: colors.textMuted, fontSize: font.h2 }]}>
+        {label}
+      </Text>
+    </PressableScale>
+  );
+}
+
+const KEY_SIZE = 72;
+
 const styles = StyleSheet.create({
   container: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.xl },
-  staffBtn: {
-    position: 'absolute',
-    top: 0,
-    right: spacing.lg,
-    padding: spacing.sm,
-  },
-  staffText: { color: '#ffffff99', fontSize: font.small, fontWeight: '600' },
   hero: { alignItems: 'center', marginBottom: spacing.xxl },
   logoBadge: {
     width: 116,
@@ -166,32 +198,50 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.lg,
   },
+
+  // Keypad modal
   modalBackdrop: {
     flex: 1,
-    backgroundColor: '#0009',
+    backgroundColor: '#000a',
     alignItems: 'center',
     justifyContent: 'center',
     padding: spacing.xl,
   },
-  pinCard: {
+  padCard: {
     width: '100%',
-    maxWidth: 360,
+    maxWidth: 340,
     backgroundColor: colors.surface,
-    borderRadius: 20,
+    borderRadius: 24,
     padding: spacing.xl,
+    alignItems: 'center',
   },
-  pinTitle: { fontSize: font.h2, fontWeight: '800', color: colors.text },
-  pinSub: { fontSize: font.body, color: colors.textMuted, marginTop: spacing.xs, marginBottom: spacing.lg },
-  pinInput: {
-    borderWidth: 1,
+  padTitle: { fontSize: font.h2, fontWeight: '800', color: colors.text },
+  padSub: { fontSize: font.body, color: colors.textMuted, marginTop: spacing.xs },
+  dotsRow: { flexDirection: 'row', gap: spacing.md, marginVertical: spacing.xl },
+  dot: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2,
     borderColor: colors.border,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    fontSize: font.h2,
-    letterSpacing: 8,
-    textAlign: 'center',
-    color: colors.text,
   },
-  pinError: { color: colors.danger, marginTop: spacing.sm, fontWeight: '600' },
+  dotFilled: { backgroundColor: colors.primary, borderColor: colors.primary },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    width: KEY_SIZE * 3 + spacing.md * 2,
+    gap: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  key: {
+    width: KEY_SIZE,
+    height: KEY_SIZE,
+    borderRadius: KEY_SIZE / 2,
+    backgroundColor: colors.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  keyEmpty: { width: KEY_SIZE, height: KEY_SIZE },
+  keyText: { fontSize: font.h1, fontWeight: '600', color: colors.text },
 });

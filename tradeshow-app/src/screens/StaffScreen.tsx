@@ -12,7 +12,7 @@ export default function StaffScreen({ navigation }: ScreenProps<'Staff'>) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.lg }]}>
-      <Text style={styles.title}>Staff</Text>
+      <Text style={styles.title}>Admin</Text>
       <Text style={styles.sub}>{adapterLabel}</Text>
 
       <View style={{ height: spacing.xl }} />

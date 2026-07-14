@@ -28,8 +28,9 @@ export const brand = {
   eventName: '',
 
   // ---- Staff access ----
-  /** PIN to reach the staff area (view orders + manage catalog). CHANGE THIS. */
-  staffPin: '1234',
+  /** Code to reach the admin area (view orders + manage catalog).
+   *  Tap the logo on the welcome screen, then enter this on the number pad. */
+  staffPin: '5680',
 
   /** Your brand color. Keep in sync with colors.primary in theme.ts. */
   brandColor: '#007AFF',
