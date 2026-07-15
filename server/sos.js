@@ -57,38 +57,45 @@ async function sosGet(path) {
   return res.json();
 }
 
-// Map a raw SOS item to the app's Product shape.
-// VERIFY these field names against a real SOS /items response.
+// Map a raw SOS item to the app's Product shape. Field names confirmed against
+// a real SOS /api/v2/items response.
 function mapItem(raw) {
+  const uom = Array.isArray(raw.uoms) && raw.uoms[0]?.name ? raw.uoms[0].name : 'each';
   return {
     id: String(raw.id),
-    name: raw.name || raw.fullname || '',
+    name: (raw.name || raw.fullname || '').trim(),
     sku: raw.sku || '',
-    price: Number(raw.salesPrice ?? raw.price ?? 0),
-    unit: raw.uom || raw.salesUom || 'each',
-    description: raw.description || raw.salesDescription || '',
-    // Image: SOS may expose an image URL or require a separate call. Marked TODO
-    // until verified; the app falls back to its own photo if this is null.
-    imageUri: raw.imageUrl || raw.image || null,
-    active: raw.archived ? false : true,
+    price: Number(raw.salesPrice ?? raw.baseSalesPrice ?? 0),
+    unit: uom,
+    description: raw.description || '',
+    // SOS returns the image inline as base64 (imageAsBase64String) when included.
+    imageUri: raw.imageAsBase64String
+      ? `data:image/jpeg;base64,${raw.imageAsBase64String}`
+      : null,
+    hasImage: !!raw.hasImage,
+    active: !raw.archived && raw.showOnSalesForms !== false,
     sosId: String(raw.id),
   };
 }
 
-// Fetch the full item list (handles basic pagination). VERIFY endpoint + params.
+// Only real, sellable products belong in the order catalog.
+function isSellable(raw) {
+  return raw && raw.type !== 'Category' && !raw.archived && raw.showOnSalesForms !== false;
+}
+
+// Fetch the full item list (handles basic pagination).
 async function fetchAllItems() {
-  const items = [];
+  const raw = [];
   let start = 0;
   const count = 200;
-  // SOS commonly uses ?start=&count= or ?maxresults=&page=; adjust after verify.
   for (let page = 0; page < 50; page++) {
     const data = await sosGet(`/api/v2/items?start=${start}&count=${count}`);
     const batch = Array.isArray(data) ? data : data.data || data.items || [];
-    items.push(...batch);
+    raw.push(...batch);
     if (batch.length < count) break;
     start += count;
   }
-  return items.map(mapItem);
+  return raw.filter(isSellable).map(mapItem);
 }
 
 /** Returns the catalog, using the cache unless it's stale. */
