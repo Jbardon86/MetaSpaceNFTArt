@@ -13,16 +13,37 @@ if (!token) {
   process.exit(1);
 }
 
+const CANDIDATES = [
+  '/api/v2/items',
+  '/api/v1/items',
+  '/api/items',
+  '/api/item',
+  '/api/v2/item',
+  '/api/v1/item',
+  '/api/v2/product',
+  '/api/product',
+];
+
 (async () => {
-  const res = await fetch(`${BASE}/api/v2/items?count=300`, {
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-  });
-  if (!res.ok) {
-    console.error(`Fetch failed (${res.status}): ${await res.text()}`);
+  let items = null;
+  let workingPath = '';
+  for (const path of CANDIDATES) {
+    const res = await fetch(`${BASE}${path}?count=300`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      items = Array.isArray(data) ? data : data.data || data.items || [];
+      workingPath = path;
+      break;
+    }
+    console.log(`(tried ${path} -> ${res.status})`);
+  }
+  if (!items) {
+    console.error('\nNone of the candidate item endpoints worked. Paste the (tried …) lines above to me.');
     process.exit(1);
   }
-  const data = await res.json();
-  const items = Array.isArray(data) ? data : data.data || data.items || [];
+  console.log(`\n✅ Working items endpoint: ${workingPath}`);
   console.log(`\nTotal items returned: ${items.length}`);
 
   const byType = {};
