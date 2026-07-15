@@ -40,6 +40,24 @@ from `MockSalesforceAdapter` to `RestSalesforceAdapter`.
 Deploy anywhere that runs Node: Render, Railway, Fly.io, a small VM, etc.
 Set the same environment variables there. Use HTTPS.
 
+## Shared catalog from SOS Inventory
+The app pulls ONE shared product catalog from SOS Inventory via `GET /api/catalog`.
+Products are managed in SOS; the app mirrors them (and caches locally for offline).
+
+Setup:
+1. **Register a developer app** at https://developer.sosinventory.com → get a
+   **Client ID** and **Client Secret**. Set a redirect URI (use this server's
+   `/sos/callback` once deployed, or a placeholder to start).
+2. **Authorize your SOS company** (ENDLESS FUN LLC) via the OAuth flow to get an
+   **access token + refresh token**.
+3. Put all four values in `.env` (`SOS_CLIENT_ID`, `SOS_CLIENT_SECRET`,
+   `SOS_ACCESS_TOKEN`, `SOS_REFRESH_TOKEN`).
+4. Restart the server and hit `/api/catalog` — you should get your items.
+
+> The item field mapping in `sos.js` (`mapItem`) is based on public docs and
+> must be verified against a real SOS `/items` response, especially the image
+> field. We lock this in once we can call the live API.
+
 ## Phase 2 — Salesforce
 Add `jsforce`, authenticate with a Salesforce Connected App, and in
 `POST /api/orders` create the Account/Contact + Order/OrderItem, returning the

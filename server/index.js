@@ -15,6 +15,7 @@
 
 const express = require('express');
 const nodemailer = require('nodemailer');
+const sos = require('./sos');
 
 const app = express();
 app.use(express.json({ limit: '5mb' }));
@@ -77,6 +78,23 @@ function buildConfirmationEmail(order) {
 }
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
+
+// The app fetches the shared product catalog from SOS Inventory here.
+app.get('/api/catalog', async (req, res) => {
+  if (!process.env.SOS_REFRESH_TOKEN) {
+    return res.status(503).json({
+      error: 'SOS not configured yet. Set SOS_* env vars (see README).',
+      items: [],
+    });
+  }
+  try {
+    const items = await sos.getCatalog({ force: req.query.force === '1' });
+    res.json({ items });
+  } catch (err) {
+    console.error('Catalog fetch failed:', err);
+    res.status(502).json({ error: String(err && err.message ? err.message : err), items: [] });
+  }
+});
 
 // The app POSTs an order here (payload shape from restAdapter.toSalesforceOrderPayload).
 app.post('/api/orders', async (req, res) => {
