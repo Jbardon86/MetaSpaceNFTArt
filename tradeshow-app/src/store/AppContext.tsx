@@ -12,6 +12,8 @@ import { newId } from './id';
 import * as db from './db';
 import { MockSalesforceAdapter } from '../salesforce/adapter';
 import { brand } from '../brand';
+import { fetchRemoteCatalog } from '../catalog/remote';
+import { usesRemoteCatalog } from '../config';
 // Phase 2: import { RestSalesforceAdapter } from '../salesforce/restAdapter';
 
 // Swap this line to go live in Phase 2:
@@ -33,6 +35,12 @@ interface AppState {
   // catalog
   upsertProduct: (p: Partial<Product> & { name: string }) => Promise<void>;
   toggleProductActive: (id: string) => Promise<void>;
+  /** Whether the catalog is managed remotely (SOS via backend). */
+  remoteCatalog: boolean;
+  catalogSyncing: boolean;
+  lastCatalogSync: string | null;
+  catalogError: string | null;
+  refreshCatalog: () => Promise<void>;
 
   // customers
   addCustomer: (c: Omit<Customer, 'id'>) => Promise<Customer>;
@@ -53,7 +61,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [catalogSyncing, setCatalogSyncing] = useState(false);
+  const [lastCatalogSync, setLastCatalogSync] = useState<string | null>(null);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
   const syncing = useRef(false);
+
+  // Pull the shared catalog from the backend (SOS). Falls back to the locally
+  // cached products on failure, so booths keep working offline.
+  const refreshCatalog = useCallback(async () => {
+    if (!usesRemoteCatalog) return;
+    setCatalogSyncing(true);
+    setCatalogError(null);
+    try {
+      const remote = await fetchRemoteCatalog();
+      if (remote && remote.length > 0) {
+        setProducts(remote);
+        db.saveProducts(remote); // cache for offline
+        setLastCatalogSync(new Date().toISOString());
+      }
+    } catch (e) {
+      setCatalogError(e instanceof Error ? e.message : 'Catalog sync failed');
+    } finally {
+      setCatalogSyncing(false);
+    }
+  }, []);
 
   // Initial load.
   useEffect(() => {
@@ -66,12 +97,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         db.getOrders(),
       ]);
       setSession(s);
-      setProducts(p);
+      setProducts(p); // show cached catalog immediately
       setCustomers(c);
       setOrders(o);
       setLoading(false);
+      // Then refresh from the backend in the background.
+      refreshCatalog();
     })();
-  }, []);
+  }, [refreshCatalog]);
 
   const login = useCallback(async (repName: string, eventName: string) => {
     const s: Session = { repName: repName.trim(), eventName: eventName.trim() };
@@ -214,6 +247,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     logout,
     upsertProduct,
     toggleProductActive,
+    remoteCatalog: usesRemoteCatalog,
+    catalogSyncing,
+    lastCatalogSync,
+    catalogError,
+    refreshCatalog,
     addCustomer,
     submitOrder,
     syncPending,

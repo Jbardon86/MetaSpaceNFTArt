@@ -21,7 +21,8 @@ import { formatMoney, Product } from '../types';
 import { colors, font, radius, spacing } from '../theme';
 
 export default function CatalogScreen(_props: ScreenProps<'Catalog'>) {
-  const { products, upsertProduct, toggleProductActive } = useApp();
+  const { products, upsertProduct, toggleProductActive, remoteCatalog, catalogSyncing, catalogError, refreshCatalog } =
+    useApp();
   const insets = useSafeAreaInsets();
   const [editing, setEditing] = useState<Product | 'new' | null>(null);
 
@@ -31,6 +32,23 @@ export default function CatalogScreen(_props: ScreenProps<'Catalog'>) {
         data={products}
         keyExtractor={(p) => p.id}
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 100 }}
+        ListHeaderComponent={
+          remoteCatalog ? (
+            <Card style={styles.syncCard}>
+              <Text style={styles.syncTitle}>📦 Catalog synced from SOS Inventory</Text>
+              <Text style={styles.syncSub}>
+                Manage products in SOS — this list mirrors it. {catalogError ? `\n⚠️ ${catalogError}` : ''}
+              </Text>
+              <View style={{ height: spacing.md }} />
+              <Button
+                title={catalogSyncing ? 'Syncing…' : 'Sync now'}
+                variant="secondary"
+                onPress={refreshCatalog}
+                loading={catalogSyncing}
+              />
+            </Card>
+          ) : null
+        }
         renderItem={({ item }) => (
           <Card style={styles.row}>
             <Pressable style={styles.rowMain} onPress={() => setEditing(item)}>
@@ -220,6 +238,9 @@ const styles = StyleSheet.create({
   inactive: { color: colors.textMuted, textDecorationLine: 'line-through' },
   sub: { fontSize: font.small, color: colors.textMuted, marginTop: 2 },
   empty: { textAlign: 'center', color: colors.textMuted, marginTop: spacing.xl, fontSize: font.body },
+  syncCard: { marginBottom: spacing.lg },
+  syncTitle: { fontSize: font.h3, fontWeight: '700', color: colors.text },
+  syncSub: { fontSize: font.small, color: colors.textMuted, marginTop: spacing.xs },
   footer: {
     position: 'absolute',
     left: 0,
