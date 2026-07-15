@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   FlatList,
   Image,
@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -25,12 +26,38 @@ export default function CatalogScreen(_props: ScreenProps<'Catalog'>) {
     useApp();
   const insets = useSafeAreaInsets();
   const [editing, setEditing] = useState<Product | 'new' | null>(null);
+  const [query, setQuery] = useState('');
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return products;
+    return products.filter(
+      (p) => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q)
+    );
+  }, [products, query]);
 
   return (
     <View style={{ flex: 1 }}>
+      <View style={styles.searchWrap}>
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search products…"
+          placeholderTextColor={colors.textMuted}
+          style={styles.search}
+          autoCorrect={false}
+          clearButtonMode="while-editing"
+        />
+        {products.length > 0 ? (
+          <Text style={styles.count}>
+            {filtered.length} of {products.length}
+          </Text>
+        ) : null}
+      </View>
       <FlatList
-        data={products}
+        data={filtered}
         keyExtractor={(p) => p.id}
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 100 }}
         ListHeaderComponent={
           remoteCatalog ? (
@@ -65,7 +92,9 @@ export default function CatalogScreen(_props: ScreenProps<'Catalog'>) {
           </Card>
         )}
         ListEmptyComponent={
-          <Text style={styles.empty}>No products yet. Add your first one below.</Text>
+          <Text style={styles.empty}>
+            {query.trim() ? `No products match “${query.trim()}”.` : 'No products yet. Add your first one below.'}
+          </Text>
         }
       />
 
@@ -238,6 +267,19 @@ const styles = StyleSheet.create({
   inactive: { color: colors.textMuted, textDecorationLine: 'line-through' },
   sub: { fontSize: font.small, color: colors.textMuted, marginTop: 2 },
   empty: { textAlign: 'center', color: colors.textMuted, marginTop: spacing.xl, fontSize: font.body },
+  searchWrap: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.sm },
+  search: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    fontSize: font.body,
+    color: colors.text,
+    minHeight: 48,
+  },
+  count: { fontSize: font.small, color: colors.textMuted, marginTop: spacing.xs, marginLeft: spacing.xs },
   syncCard: { marginBottom: spacing.lg },
   syncTitle: { fontSize: font.h3, fontWeight: '700', color: colors.text },
   syncSub: { fontSize: font.small, color: colors.textMuted, marginTop: spacing.xs },
