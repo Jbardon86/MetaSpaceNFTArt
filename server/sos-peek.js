@@ -13,7 +13,7 @@ if (!token) {
   process.exit(1);
 }
 
-const CANDIDATES = ['/api/v1/items', '/api/v2/items', '/api/items'];
+const CANDIDATES = ['/api/v2/item', '/api/v1/item', '/api/v2/items', '/api/v1/items'];
 
 (async () => {
   let items = null;

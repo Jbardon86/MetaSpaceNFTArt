@@ -89,7 +89,7 @@ async function fetchAllItems() {
   let start = 0;
   const count = 200;
   for (let page = 0; page < 50; page++) {
-    const data = await sosGet(`/api/v1/items?start=${start}&count=${count}`);
+    const data = await sosGet(`/api/v2/item?start=${start}&count=${count}`);
     const batch = Array.isArray(data) ? data : data.data || data.items || [];
     raw.push(...batch);
     if (batch.length < count) break;
