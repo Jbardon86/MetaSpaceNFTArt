@@ -6,6 +6,7 @@ services:
     name: endlessfun-orders-backend
     runtime: node
     plan: free
+    branch: claude/tradeshow-order-app-889w6d
     rootDir: server
     buildCommand: npm install
     startCommand: npm start
