@@ -13,34 +13,44 @@ if (!token) {
   process.exit(1);
 }
 
-const CANDIDATES = [
-  '/api/v2/items',
-  '/api/v1/items',
-  '/api/items',
-  '/api/item',
-  '/api/v2/item',
-  '/api/v1/item',
-  '/api/v2/product',
-  '/api/product',
-];
+const CANDIDATES = ['/api/v1/items', '/api/v2/items', '/api/items'];
 
 (async () => {
   let items = null;
   let workingPath = '';
+  let saw401 = false;
   for (const path of CANDIDATES) {
     const res = await fetch(`${BASE}${path}?count=300`, {
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
     });
-    if (res.ok) {
-      const data = await res.json();
-      items = Array.isArray(data) ? data : data.data || data.items || [];
-      workingPath = path;
-      break;
+    if (res.status === 401) {
+      saw401 = true;
+      console.log(`(${path} -> 401: endpoint exists, but token rejected/expired)`);
+      continue;
     }
-    console.log(`(tried ${path} -> ${res.status})`);
+    if (!res.ok) {
+      console.log(`(tried ${path} -> ${res.status})`);
+      continue;
+    }
+    const text = await res.text();
+    if (text.trim().startsWith('<')) {
+      console.log(`(${path} -> returned HTML, not the API — skipping)`);
+      continue;
+    }
+    const data = JSON.parse(text);
+    items = Array.isArray(data) ? data : data.data || data.items || [];
+    workingPath = path;
+    break;
   }
   if (!items) {
-    console.error('\nNone of the candidate item endpoints worked. Paste the (tried …) lines above to me.');
+    if (saw401) {
+      console.error(
+        '\n⚠️  Your access token expired. Re-run the two sos-auth.js steps to get a FRESH token,\n' +
+          '   then: export SOS_ACCESS_TOKEN=the_new_token  and run this again.'
+      );
+    } else {
+      console.error('\nNo endpoint worked. Paste the (tried …) lines to me.');
+    }
     process.exit(1);
   }
   console.log(`\n✅ Working items endpoint: ${workingPath}`);
