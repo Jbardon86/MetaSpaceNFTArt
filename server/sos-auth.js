@@ -42,24 +42,45 @@ if (!code) {
 
 (async () => {
   // --- Exchange the authorization code for tokens ---
-  const body = new URLSearchParams({
-    grant_type: 'authorization_code',
-    code,
-    redirect_uri: REDIRECT,
-    client_id: CLIENT_ID,
-    client_secret: CLIENT_SECRET,
-  });
-  const tokRes = await fetch(`${BASE}/oauth2/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  });
-  const tokText = await tokRes.text();
-  if (!tokRes.ok) {
-    console.error(`\nToken exchange failed (${tokRes.status}):\n${tokText}\n`);
+  // Try two client-auth methods; SOS may require HTTP Basic auth.
+  const basic = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64');
+  const attempts = [
+    {
+      label: 'Basic auth header',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Basic ${basic}`,
+      },
+      body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: REDIRECT }),
+    },
+    {
+      label: 'credentials in body',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: REDIRECT,
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+      }),
+    },
+  ];
+
+  let tokens = null;
+  for (const a of attempts) {
+    const r = await fetch(`${BASE}/oauth2/token`, { method: 'POST', headers: a.headers, body: a.body });
+    const t = await r.text();
+    if (r.ok) {
+      console.log(`\n(token method that worked: ${a.label})`);
+      tokens = JSON.parse(t);
+      break;
+    }
+    console.log(`\n(tried ${a.label} -> ${r.status}: ${t})`);
+  }
+  if (!tokens) {
+    console.error('\nToken exchange failed with both methods. Double-check the Client Secret and that the code is fresh (they expire fast — re-run Step 1 to get a new code).\n');
     process.exit(1);
   }
-  const tokens = JSON.parse(tokText);
   console.log('\n✅ Got tokens. SAVE THESE somewhere safe — do NOT paste them in chat:\n');
   console.log('SOS_ACCESS_TOKEN=', tokens.access_token);
   console.log('SOS_REFRESH_TOKEN=', tokens.refresh_token);
