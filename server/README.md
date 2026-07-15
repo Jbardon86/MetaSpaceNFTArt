@@ -36,9 +36,19 @@ In the app's `src/salesforce/restAdapter.ts`, set `BACKEND_URL` to this
 server's public URL, then switch the adapter in `src/store/AppContext.tsx`
 from `MockSalesforceAdapter` to `RestSalesforceAdapter`.
 
-## Hosting
-Deploy anywhere that runs Node: Render, Railway, Fly.io, a small VM, etc.
-Set the same environment variables there. Use HTTPS.
+## Hosting (Render — easiest)
+There's a `render.yaml` blueprint at the repo root for one-click deploy:
+1. Create a free account at https://render.com and connect your GitHub.
+2. **New → Blueprint** → pick the `MetaSpaceNFTArt` repo → it reads `render.yaml`.
+3. In the dashboard, fill in the secret env vars (SOS_* and SMTP_PASS).
+4. Deploy → you get a public URL like `https://endlessfun-orders-backend.onrender.com`.
+5. Put that URL in the app's `src/config.ts` (`BACKEND_URL`) and publish an update.
+
+(You can deploy anywhere that runs Node — Railway, Fly.io, a VM — with the same
+env vars. Use HTTPS.)
+
+> Free Render services sleep when idle and take ~30s to wake on the first
+> request. Fine for a booth; upgrade the plan if you want it always-on.
 
 ## Shared catalog from SOS Inventory
 The app pulls ONE shared product catalog from SOS Inventory via `GET /api/catalog`.

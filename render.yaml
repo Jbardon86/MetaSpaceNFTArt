@@ -1,0 +1,35 @@
+# Render.com blueprint — one-click deploy of the Endless Fun Orders backend.
+# In Render: New → Blueprint → connect this repo → it reads this file.
+# Then set the secret env vars (marked sync:false) in the Render dashboard.
+services:
+  - type: web
+    name: endlessfun-orders-backend
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      # SOS Inventory (shared catalog)
+      - key: SOS_BASE_URL
+        value: https://api.sosinventory.com
+      - key: SOS_CLIENT_ID
+        sync: false
+      - key: SOS_CLIENT_SECRET
+        sync: false
+      - key: SOS_ACCESS_TOKEN
+        sync: false
+      - key: SOS_REFRESH_TOKEN
+        sync: false
+      # Microsoft 365 email (order confirmations from order@endlessfun.biz)
+      - key: SMTP_HOST
+        value: smtp.office365.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        value: order@endlessfun.biz
+      - key: SMTP_PASS
+        sync: false
+      - key: MAIL_FROM
+        value: Endless Fun <order@endlessfun.biz>
