@@ -177,6 +177,24 @@ function getClaims() {
   return readJson('claims.json', { claims: [] });
 }
 
+// Supporting documents a dispute needs before it can be filed. Walmart denies a
+// shortage claim without proof the goods shipped and were received, so a claim
+// isn't fileable until these are in hand. Each is tracked on the claim as
+// `claim.docs[key] = { have: bool, ref: string }`.
+const REQUIRED_DOCS = [
+  { key: 'pod', label: 'Proof of delivery (BOL/POD)' },
+  { key: 'invoice', label: 'Original invoice' },
+];
+
+/**
+ * Whether a claim's supporting documents are all in hand, and which are missing.
+ */
+function claimDocsStatus(claim) {
+  const docs = (claim && claim.docs) || {};
+  const missing = REQUIRED_DOCS.filter((d) => !(docs[d.key] && docs[d.key].have));
+  return { complete: missing.length === 0, missing: missing.map((d) => d.label) };
+}
+
 /**
  * Lookup from a rebill "New Inv #" we've issued -> the original claim it stands
  * for. A recovered dispute comes back from Walmart under the rebill number, so
@@ -311,6 +329,8 @@ module.exports = {
   DEFAULT_NEXT_NEW_INVOICE,
   getClaims,
   getRebillIndex,
+  REQUIRED_DOCS,
+  claimDocsStatus,
   saveClaims,
   addClaims,
   updateClaim,

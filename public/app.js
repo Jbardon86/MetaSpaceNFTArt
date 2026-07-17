@@ -302,6 +302,7 @@ async function loadClaims() {
     const { claims, totals } = await api('/api/claims');
     $('disputeTotals').innerHTML =
       tile('Open claims', totals.openCount) +
+      tile('Needs docs', totals.needsDocsCount || 0, totals.needsDocsCount ? 'bad' : '') +
       tile('Open $', money(totals.openAmount), totals.openAmount ? 'bad' : '') +
       tile('Recovered $', money(totals.recoveredAmount), 'good');
     if (!claims.length) {
@@ -315,26 +316,45 @@ async function loadClaims() {
       const amountCell = rec > 0 && c.status !== 'recovered'
         ? `${money(c.amount)}<div class="acct small">${money(rec)} back</div>`
         : money(c.amount);
+      const ds = c.docsStatus || { complete: false };
+      const has = (k) => c.docs && c.docs[k] && c.docs[k].have;
+      const docsCell = done
+        ? '<span class="acct">—</span>'
+        : `<div class="docs">
+             <span class="pill ${ds.complete ? 'ok' : 'warn'}">${ds.complete ? 'Docs ready' : 'Needs docs'}</span>
+             <label class="docchk"><input type="checkbox" class="docbox" data-id="${esc(c.id)}" data-doc="pod" ${has('pod') ? 'checked' : ''}> POD</label>
+             <label class="docchk"><input type="checkbox" class="docbox" data-id="${esc(c.id)}" data-doc="invoice" ${has('invoice') ? 'checked' : ''}> Invoice</label>
+           </div>`;
       return `<tr class="${done ? 'muted' : ''}">
-        <td><input type="checkbox" class="clsel" data-id="${esc(c.id)}" ${c.status === 'ready' ? 'checked' : ''}></td>
+        <td><input type="checkbox" class="clsel" data-id="${esc(c.id)}" ${c.status === 'ready' && ds.complete ? 'checked' : ''}></td>
         <td>${esc(c.invoice)}</td>
         <td class="acct">${esc(c.po || '—')}</td>
         <td>[${esc(c.code)}]</td>
         <td class="num neg">${amountCell}</td>
         <td class="acct">${esc(c.shipDate || '—')}</td>
-        <td class="acct">${esc(c.checkNumber || '—')}</td>
+        <td>${docsCell}</td>
         <td><select class="clstatus" data-id="${esc(c.id)}">${opts}</select></td>
         <td class="acct">${esc(c.newInvoice || '—')}</td>
       </tr>`;
     }).join('');
     body.innerHTML =
       `<div class="tbl-wrap"><table>
-        <thead><tr><th></th><th>Invoice</th><th>PO</th><th>Code</th><th class="num">Amount</th><th>Ship date</th><th>Check</th><th>Status</th><th>New Inv #</th></tr></thead>
+        <thead><tr><th></th><th>Invoice</th><th>PO</th><th>Code</th><th class="num">Amount</th><th>Ship date</th><th>Docs</th><th>Status</th><th>New Inv #</th></tr></thead>
         <tbody>${rows}</tbody></table></div>`;
     body.querySelectorAll('.clstatus').forEach((sel) =>
       sel.addEventListener('change', async (e) => {
         try { await api(`/api/claims/${encodeURIComponent(e.target.dataset.id)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: e.target.value }) }); loadClaims(); }
         catch (err) { toast(err.message, true); }
+      })
+    );
+    body.querySelectorAll('.docbox').forEach((box) =>
+      box.addEventListener('change', async (e) => {
+        const { id, doc } = e.target.dataset;
+        const have = e.target.checked;
+        try {
+          await api(`/api/claims/${encodeURIComponent(id)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ docs: { [doc]: { have } } }) });
+          loadClaims();
+        } catch (err) { e.target.checked = !have; toast(err.message, true); }
       })
     );
   } catch (err) {
@@ -347,12 +367,19 @@ async function exportClaims() {
   try {
     const res = await fetch('/api/claims/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) });
     if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Export failed'); }
+    // Claims held back for missing documents (the export files only documented ones).
+    let skipped = [];
+    try { skipped = JSON.parse(res.headers.get('X-Skipped-Missing-Docs') || '[]'); } catch (_) { /* none */ }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = 'Recovery_Submission.xlsx'; a.click();
     URL.revokeObjectURL(url);
-    toast('Exported. Claims marked Filed. File it in Retail Link.');
+    if (skipped.length) {
+      toast(`Filed the documented claims. Held back ${skipped.length} missing docs: inv ${skipped.map((s) => s.invoice).join(', ')}.`, true);
+    } else {
+      toast('Exported. Claims marked Filed. File it in Retail Link.');
+    }
     loadClaims();
   } catch (err) {
     toast(err.message, true);

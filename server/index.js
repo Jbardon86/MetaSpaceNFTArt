@@ -346,11 +346,14 @@ function summarizeClaims(claims) {
       0
     )
   );
+  // Open claims still missing their proof documents — can't be filed yet.
+  const needsDocsCount = open.filter((c) => !store.claimDocsStatus(c).complete).length;
   return {
     count: claims.length,
     openCount: open.length,
     openAmount,
     recoveredAmount,
+    needsDocsCount,
     readyCount: by('ready').length,
     filedCount: by('filed').length,
     partialCount: by('partial').length,
@@ -361,7 +364,8 @@ app.get(
   '/api/claims',
   wrap(async (req, res) => {
     const claims = store.getClaims().claims.slice().reverse();
-    res.json({ claims, totals: summarizeClaims(claims) });
+    const withStatus = claims.map((c) => ({ ...c, docsStatus: store.claimDocsStatus(c) }));
+    res.json({ claims: withStatus, totals: summarizeClaims(claims) });
   })
 );
 
@@ -379,11 +383,30 @@ app.post(
     );
     if (!selected.length) throw badRequest('No claims to export.');
 
-    // Assign a rebill (New Inv #) to any claim that doesn't have one yet.
+    // Failsafe: a claim can't be filed without its proof documents, or Walmart
+    // denies it. Split the selection — file the ones with complete docs, hold
+    // back the rest and report exactly what each is missing.
+    const ready = [];
+    const blocked = [];
+    for (const c of selected) {
+      const st = store.claimDocsStatus(c);
+      if (st.complete) ready.push(c);
+      else blocked.push({ id: c.id, invoice: c.invoice, missing: st.missing });
+    }
+    if (!ready.length) {
+      const list = blocked.map((b) => `inv ${b.invoice} (needs ${b.missing.join(' + ')})`).join('; ');
+      throw badRequest(
+        `Nothing filed — every selected claim is missing documents: ${list}. ` +
+          `Mark the proof of delivery and invoice as in-hand on each claim, then export again.`
+      );
+    }
+
+    // Assign a rebill (New Inv #) to the documented claims only — undocumented
+    // ones stay unfiled and don't consume a rebill number.
     // Floor the counter at the safe minimum so a stale or hand-edited config
     // can never reissue a number already submitted to Walmart.
     let next = Math.max(Number(cfg.nextNewInvoice) || 0, store.minSafeNewInvoice());
-    for (const c of selected) {
+    for (const c of ready) {
       if (!c.newInvoice) {
         c.newInvoice = String(next++);
         store.updateClaim(c.id, { newInvoice: c.newInvoice, status: c.status === 'ready' ? 'filed' : c.status });
@@ -394,9 +417,11 @@ app.post(
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('RecoverySubmission');
     ws.addRow(['PO Number', 'Vendor #', 'Dept', 'Seq', 'Whse', 'Ship Date', 'Orig Inv #', 'New Inv #', 'Amt To Submit']);
-    for (const c of selected) {
+    for (const c of ready) {
       ws.addRow([c.po, cfg.vendorNumber, cfg.dept, cfg.seq, c.whse, c.shipDate, c.invoice, c.newInvoice, c.amount]);
     }
+    // Tell the browser which claims were held back for missing documents.
+    if (blocked.length) res.setHeader('X-Skipped-Missing-Docs', JSON.stringify(blocked));
     const buf = await wb.xlsx.writeBuffer();
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="Recovery_Submission_${cfg.vendorNumber}.xlsx"`);
@@ -414,9 +439,22 @@ app.post(
       patch.status = req.body.status;
     }
     if (typeof req.body.notes === 'string') patch.notes = req.body.notes;
+
+    // Supporting-document updates merge into the claim's existing docs so
+    // setting one (e.g. proof of delivery) doesn't clear the other (invoice).
+    if (req.body.docs && typeof req.body.docs === 'object') {
+      const current = store.getClaims().claims.find((c) => c.id === req.params.id);
+      if (!current) throw badRequest('Claim not found.');
+      const merged = { ...(current.docs || {}) };
+      for (const key of Object.keys(req.body.docs)) {
+        merged[key] = { ...(merged[key] || {}), ...(req.body.docs[key] || {}) };
+      }
+      patch.docs = merged;
+    }
+
     const claim = store.updateClaim(req.params.id, patch);
     if (!claim) throw badRequest('Claim not found.');
-    res.json({ ok: true, claim });
+    res.json({ ok: true, claim: { ...claim, docsStatus: store.claimDocsStatus(claim) } });
   })
 );
 

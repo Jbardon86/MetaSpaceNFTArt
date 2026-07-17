@@ -76,6 +76,18 @@ test('matchRepayments handles a PARTIAL recovery, then completes it', () => {
   assert.strictEqual(claim.recoveredAmount, 40);
 });
 
+// --- Filing failsafe: supporting documents --------------------------------
+
+test('claimDocsStatus reports missing docs until both are in hand', () => {
+  assert.strictEqual(store.claimDocsStatus({}).complete, false); // no docs at all
+  assert.strictEqual(store.claimDocsStatus({ docs: { pod: { have: true } } }).complete, false); // only POD
+  const partial = store.claimDocsStatus({ docs: { pod: { have: true } } });
+  assert.ok(partial.missing.some((m) => /invoice/i.test(m)));
+  const done = store.claimDocsStatus({ docs: { pod: { have: true }, invoice: { have: true } } });
+  assert.strictEqual(done.complete, true);
+  assert.strictEqual(done.missing.length, 0);
+});
+
 test('an already fully-recovered claim is not matched again', () => {
   store.addClaims([{ checkNumber: '933', invoice: '46500', code: '0022', amount: 10 }]);
   store.updateClaim('933-46500-0022', { newInvoice: '8980800' });
