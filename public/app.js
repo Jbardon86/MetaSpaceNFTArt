@@ -242,6 +242,7 @@ function setNav(view) {
   $('navImport').classList.toggle('active', view === 'import');
   $('navDisputes').classList.toggle('active', view === 'disputes');
   $('navHistory').classList.toggle('active', view === 'history');
+  $('navSettings').classList.toggle('active', view === 'settings');
 }
 
 const CLAIM_STATUSES = [
@@ -322,6 +323,101 @@ async function exportClaims() {
   }
 }
 
+// --- settings --------------------------------------------------------------
+
+function showSettings() {
+  setNav('settings');
+  document.querySelectorAll('main > .step').forEach((s) => s.classList.add('hidden'));
+  hide('sandboxBar');
+  show('step-settings');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  loadSettings();
+}
+
+const SETTING_FIELDS = [
+  ['vendorNumber', 'Vendor #', 'Your Walmart vendor number. Appears in every row of the export.'],
+  ['dept', 'Dept', 'Walmart department number.'],
+  ['seq', 'Seq', 'Sequence number for the submission.'],
+];
+
+async function loadSettings() {
+  const body = $('settingsBody');
+  body.innerHTML = '<p class="sub">Loading…</p>';
+  try {
+    const { config, minSafe, statHighWater, recommended } = await api('/api/walmart-config');
+
+    // A config saved before the safe block was chosen can still hold a number
+    // that clears STAT's high-water mark but not by enough to survive another
+    // of their batches. Legal, so the server won't refuse it — but say so.
+    const headroom = Number(config.nextNewInvoice) - statHighWater;
+    const warning = Number(config.nextNewInvoice) < recommended
+      ? `<div class="banner warn">Next New Inv # is ${esc(config.nextNewInvoice)} — only
+         <b>${headroom}</b> numbers above STAT's last filed rebill (${statHighWater}). STAT has issued as
+         many as 125 rebills in a single batch, so one more filing from them would run straight through
+         our numbers and Walmart would reject the duplicates. Recommended: <b>${recommended}</b>.</div>`
+      : '';
+
+    const rows = SETTING_FIELDS.map(([key, label, hint]) => `
+      <div class="set-row">
+        <label for="set-${key}">${label}</label>
+        <div>
+          <input type="text" id="set-${key}" data-key="${key}" value="${esc(config[key])}" />
+          <span class="set-hint">${esc(hint)}</span>
+        </div>
+      </div>`).join('');
+
+    body.innerHTML = warning + rows + `
+      <div class="set-row">
+        <label for="set-nextNewInvoice">Next New Inv #</label>
+        <div>
+          <input type="text" id="set-nextNewInvoice" data-key="nextNewInvoice" value="${esc(config.nextNewInvoice)}" />
+          <span class="set-hint">
+            The rebill invoice number the next export will assign, counting up from there.
+            <b>Must be ${minSafe} or higher.</b> STAT Recovery already filed rebills through
+            ${statHighWater} for this vendor, and any number we've already submitted is spent —
+            reusing one gets the claim rejected by Walmart.
+          </span>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="saveSettingsBtn">Save</button>
+        <span class="hint" id="settingsHint"></span>
+      </div>`;
+    $('saveSettingsBtn').addEventListener('click', saveSettings);
+  } catch (err) {
+    body.innerHTML = `<div class="banner warn">${esc(err.message)}</div>`;
+  }
+}
+
+async function saveSettings() {
+  const btn = $('saveSettingsBtn');
+  const payload = {};
+  document.querySelectorAll('#settingsBody input[data-key]').forEach((el) => {
+    el.classList.remove('bad');
+    payload[el.dataset.key] = el.value.trim();
+  });
+  btn.disabled = true;
+  $('settingsHint').textContent = 'Saving…';
+  try {
+    await api('/api/walmart-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    $('settingsHint').textContent = '';
+    toast('Settings saved.');
+    loadSettings();
+  } catch (err) {
+    // The server owns the numbering rules, so let its message stand rather
+    // than second-guessing which field it objected to.
+    if (/New Inv #/.test(err.message)) $('set-nextNewInvoice').classList.add('bad');
+    $('settingsHint').textContent = '';
+    toast(err.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 function showHistory() {
   setNav('history');
   document.querySelectorAll('main > .step').forEach((s) => s.classList.add('hidden'));
@@ -335,6 +431,7 @@ function showImport() {
   setNav('import');
   hide('step-history');
   hide('step-disputes');
+  hide('step-settings');
   show('step-upload');
   refreshStatus().catch(() => {});
 }
@@ -373,6 +470,7 @@ async function loadHistory() {
 $('navImport').addEventListener('click', showImport);
 $('navDisputes').addEventListener('click', showDisputes);
 $('navHistory').addEventListener('click', showHistory);
+$('navSettings').addEventListener('click', showSettings);
 $('exportClaimsBtn').addEventListener('click', exportClaims);
 $('connectBtn').addEventListener('click', () => (window.location.href = '/auth/connect'));
 $('disconnectBtn').addEventListener('click', async () => { await api('/api/disconnect', { method: 'POST' }); refreshStatus(); });

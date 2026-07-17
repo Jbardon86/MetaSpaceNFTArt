@@ -19,6 +19,7 @@
         <button class="navbtn active" id="navImport">Import</button>
         <button class="navbtn" id="navDisputes">Disputes</button>
         <button class="navbtn" id="navHistory">History</button>
+        <button class="navbtn" id="navSettings">Settings</button>
       </nav>
       <div class="connection">
         <span class="status"><span class="status-dot" id="statusDot"></span><span id="connectionText">Checking…</span></span>
@@ -118,6 +119,16 @@
         <p class="sub">Checks posted from this computer. QuickBooks holds the full, authoritative record —
           this is a quick reference for what's already been run.</p>
         <div id="historyBody"></div>
+      </section>
+
+      <!-- Settings -->
+      <section class="card step hidden" id="step-settings">
+        <div class="eyebrow">Settings</div>
+        <h1>Walmart submission details</h1>
+        <p class="sub">These fill the Recovery Submission export. They rarely change — but the
+          <b>New Inv #</b> is the one to be careful with: Walmart rejects a rebill whose invoice number
+          it has already seen.</p>
+        <div id="settingsBody"></div>
       </section>
 
       <!-- Results -->

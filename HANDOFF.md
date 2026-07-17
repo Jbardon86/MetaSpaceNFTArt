@@ -89,9 +89,15 @@ the deposit fails; **duplicate guard** blocks re-posting the same check number.
 
 **Real posts completed:**
 - Check **004041349** (inv 46364–46412) → deposit **$3,173.47** ✅
-- Second check (inv 46192, 46226, 46217, 46218) → deposit **$3,504.92** ✅
-  ⚠️ User once said "wrong" about this total then moved on — math ties to
-  $3,504.92; **UNRESOLVED whether there's a real issue** — follow up.
+- Check **003983648** (inv 46192, 46226, 46217, 46218) → deposit **$3,504.92** ✅
+  **RESOLVED 2026-07-17 — the total is correct, don't re-investigate.** Verified
+  three ways: the remittance's own "Amount Paid" column nets to $3,504.92; the
+  allocator rebuilds it with `balanced: true, difference: 0`; and the per-invoice
+  amounts match QBO's invoice faces exactly (695.14 + 1010.51 + 942.48 + 942.48 =
+  $3,590.61, all four at zero balance). Breakdown: $3,590.61 into Undeposited
+  Funds − $76.17 discounts/accepted deductions − $9.52 MBNS dispute (inv 46226) =
+  $3,504.92. The "wrong" reaction was most likely $3,590.61 (the payment) being
+  read next to $3,504.92 (the deposit) — two transactions, two totals, both right.
 
 ## Phase 1 Disputes module (just built — isolated from posting)
 - On each real post, every dispute is saved as a **claim** (stages:
@@ -100,10 +106,28 @@ the deposit fails; **duplicate guard** blocks re-posting the same check number.
 - **Disputes tab**: open/recovered totals, per-claim status dropdowns.
 - **Export → Walmart "Recovery Submission" .xlsx** matching STAT's exact format:
   `PO Number · Vendor # · Dept · Seq · Whse · Ship Date · Orig Inv # · New Inv #
-  · Amt To Submit`. Assigns a rebill "New Inv #" (starts at **8974100**), marks
+  · Amt To Submit`. Assigns a rebill "New Inv #" (starts at **8980000**), marks
   claims Filed.
 - Config in `data/walmart.json`: vendorNumber 540153, dept 92, seq 1,
-  nextNewInvoice 8974100.
+  nextNewInvoice 8980000. Editable in the **Settings tab**.
+
+### Rebill numbering — why 8980000 (verified 2026-07-17)
+Walmart rejects a rebill whose invoice number it has already seen for the vendor.
+Parsing STAT's EDI 810 (`540153EDI810900000000.edi`, transmitted 2026-04-02)
+shows they used **8973800–8974007** — 137 rebills, $28,595.59, with **125 issued
+in a single day**. The old 8974100 start left only **93 numbers** of headroom
+above their high-water mark — less than one of their batches — and STAT is
+**winding down, not stopped**, so they may still file. Hence 8980000 (~6k clear,
+still in the 897xxxx family Walmart accepts). QBO's own invoices are ~47k, so no
+conflict there.
+
+Two guards enforce this (`store.minSafeNewInvoice()`):
+1. Never issue at/below STAT's `STAT_HIGH_WATER` (8974007).
+2. Never reissue a number we've already assigned — the floor ratchets up past the
+   highest `newInvoice` on any claim, so the counter can't be walked backwards.
+The export floors its counter at this too, so a stale/hand-edited config can't
+reuse a number. A config that's legal but tighter than recommended (e.g. a saved
+8974100) still saves, but the Settings tab warns with the real headroom figure.
 
 ## Architecture / files
 ```
@@ -146,15 +170,33 @@ sample-data/       sample checks
 ## Open items / where we're going
 1. **Backfill** the 2 already-posted checks' disputes into the claims list
    (offered, not done — they aren't in the Disputes tab because it records
-   going forward).
-2. **Confirm the rebill New Inv # start** (8974100) so it won't collide with
-   STAT's rebills or real invoices; add a small **settings UI** for
-   vendor#/dept/seq/nextNewInvoice.
-3. **Resolve the "wrong total"** question on the 2nd posted check.
-4. First posted deposit (004041349) has **blank "Received From"** on its
+   going forward). Check 003983648's dispute is known: **inv 46226, code 0022,
+   $9.52, PO 9034794755, whse 6043, ship 2026-06-01** — from the remittance at
+   `~/Downloads/6-10-26 ck- 003983648 (1).xlsx`. Still need 004041349's file.
+2. ~~Confirm the rebill New Inv # start + settings UI~~ — **DONE 2026-07-17.**
+   Settings tab added; start moved 8974100 → 8980000; collision guards + tests.
+   See "Rebill numbering" above.
+3. ~~Resolve the "wrong total" on the 2nd posted check~~ — **DONE 2026-07-17,
+   the total is correct.** See "Real posts completed" above.
+4. **Repayment matching gap (found 2026-07-17, not yet fixed).**
+   `store.matchRepayments()` matches a repayment to a claim by the **original**
+   invoice number, but STAT's recovery mechanism re-invoices under a **new**
+   number (the `newInvoice` we assign). If Walmart's repayment remittance
+   references the rebill number, auto-recovery silently never matches and claims
+   sit "filed" forever despite being paid. Related: a repayment row with no
+   deduction code and a positive amount classifies as `payment` in
+   `allocator.js`, so it'd be treated as an invoice payment and fail invoice
+   lookup. **Confirm against a real repayment remittance before changing the
+   matching logic** — we haven't seen one yet.
+5. **Walmart takes the 2% early-pay discount on the PRE-promo invoice amount**
+   (verified on 003983648: inv 46192 → 2% of $702.16 = $14.04, not 2% of the
+   $695.14 face). Costs ~20–35¢ per invoice carrying a promo line. This is a
+   vendor-agreement question, **not a code bug** — the app books Walmart's stated
+   discount rather than recomputing it, which is correct. Don't "fix" it in code.
+6. First posted deposit (004041349) has **blank "Received From"** on its
    adjustment lines (fixed for all future posts; that one check could be edited
    by hand in QBO).
-5. **Phase 2 — Retail Link automation (the hard part, no public API):**
+7. **Phase 2 — Retail Link automation (the hard part, no public API):**
    - Pull deductions directly from Retail Link (RPA/scrape, needs their Retail
      Link login; STAT stores a credential to do this).
    - Auto-submit disputes. STAT's actual mechanism = **re-invoice via EDI 810**
@@ -164,9 +206,9 @@ sample-data/       sample checks
      (item #, qty, unit price, product description) which the check remittance
      does NOT contain — would need Retail Link/invoice data.
    - This is fragile RPA with MFA/ToS caveats — the paywalled part even for STAT.
-6. Add **advertising/compliance deduction codes** to the decoder when a real
+8. Add **advertising/compliance deduction codes** to the decoder when a real
    check contains them (route to Marketing #60120 / Walmart Compliance #42500).
-7. Optional: merge branch → `main` for a tidier deploy (needs user OK).
+9. Optional: merge branch → `main` for a tidier deploy (needs user OK).
 
 ## Reference files the user provided
 - Walmart remittance for check 004041349 (the original sample).

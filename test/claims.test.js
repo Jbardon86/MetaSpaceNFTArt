@@ -42,3 +42,34 @@ test('walmart config has the Recovery Submission defaults', () => {
   assert.strictEqual(cfg.dept, '92');
   assert.ok(cfg.nextNewInvoice > 0);
 });
+
+// --- Rebill numbering safety ------------------------------------------------
+// Reusing an invoice number Walmart has already seen gets the claim rejected,
+// so the floor has to hold against both STAT's block and our own past exports.
+
+test('the default rebill start clears STAT high-water mark with real headroom', () => {
+  // STAT filed 137 rebills through 8974007, 125 of them in a single day, and is
+  // still winding down. Starting just above their max would not survive one
+  // more batch.
+  assert.ok(
+    store.DEFAULT_NEXT_NEW_INVOICE > store.STAT_HIGH_WATER + 1000,
+    `default ${store.DEFAULT_NEXT_NEW_INVOICE} leaves too little room above STAT's ${store.STAT_HIGH_WATER}`
+  );
+});
+
+test('minSafeNewInvoice never returns a number inside STAT block', () => {
+  assert.ok(store.minSafeNewInvoice() > store.STAT_HIGH_WATER);
+});
+
+test('minSafeNewInvoice rises above our own already-issued rebills', () => {
+  store.addClaims([{ checkNumber: '920', invoice: '600', code: '0022', amount: 5 }]);
+  store.updateClaim('920-600-0022', { newInvoice: '8985000' });
+  assert.strictEqual(store.minSafeNewInvoice(), 8985001);
+});
+
+test('minSafeNewInvoice ignores claims with no rebill number yet', () => {
+  store.addClaims([{ checkNumber: '921', invoice: '601', code: '0022', amount: 5 }]);
+  // 8985000 from the previous test is still the highest assigned; an unassigned
+  // claim must not drag the floor back down.
+  assert.strictEqual(store.minSafeNewInvoice(), 8985001);
+});

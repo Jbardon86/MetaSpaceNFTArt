@@ -278,6 +278,54 @@ app.get(
   })
 );
 
+// --- Walmart submission settings ------------------------------------------
+
+app.get(
+  '/api/walmart-config',
+  wrap(async (req, res) => {
+    res.json({
+      config: store.getWalmartConfig(),
+      minSafe: store.minSafeNewInvoice(),
+      statHighWater: store.STAT_HIGH_WATER,
+      recommended: store.DEFAULT_NEXT_NEW_INVOICE,
+    });
+  })
+);
+
+app.post(
+  '/api/walmart-config',
+  wrap(async (req, res) => {
+    const cfg = store.getWalmartConfig();
+    const body = req.body || {};
+    const next = { ...cfg };
+
+    for (const field of ['vendorNumber', 'dept', 'seq']) {
+      if (body[field] === undefined) continue;
+      const val = String(body[field]).trim();
+      if (!val) throw badRequest(`${field} can't be blank.`);
+      next[field] = val;
+    }
+
+    if (body.nextNewInvoice !== undefined) {
+      const n = Number(body.nextNewInvoice);
+      if (!Number.isInteger(n)) throw badRequest('Next New Inv # must be a whole number.');
+      // Hard stop: below this we'd reissue a number Walmart has already seen,
+      // either from STAT's block or from one of our own past exports.
+      const floor = store.minSafeNewInvoice();
+      if (n < floor) {
+        throw badRequest(
+          `Next New Inv # must be at least ${floor}. Anything lower would reuse an invoice number ` +
+            `already submitted to Walmart (STAT filed through ${store.STAT_HIGH_WATER}), which gets the claim rejected.`
+        );
+      }
+      next.nextNewInvoice = n;
+    }
+
+    store.saveWalmartConfig(next);
+    res.json({ ok: true, config: next, minSafe: store.minSafeNewInvoice() });
+  })
+);
+
 // --- Disputes / claims -----------------------------------------------------
 
 function summarizeClaims(claims) {
@@ -317,7 +365,9 @@ app.post(
     if (!selected.length) throw badRequest('No claims to export.');
 
     // Assign a rebill (New Inv #) to any claim that doesn't have one yet.
-    let next = cfg.nextNewInvoice;
+    // Floor the counter at the safe minimum so a stale or hand-edited config
+    // can never reissue a number already submitted to Walmart.
+    let next = Math.max(Number(cfg.nextNewInvoice) || 0, store.minSafeNewInvoice());
     for (const c of selected) {
       if (!c.newInvoice) {
         c.newInvoice = String(next++);

@@ -111,19 +111,51 @@ function saveAccounts(accounts) {
 
 // --- Walmart submission config (for the Recovery Submission export) --------
 
+// Rebill ("New Inv #") numbering safety.
+//
+// Walmart keys invoices by number per vendor, so reusing a number that has
+// already been submitted for vendor 540153 gets the claim rejected or misapplied.
+// Two separate sources of collision to stay clear of:
+//
+//  1. STAT Recovery's block. Verified from their EDI 810 (transmitted
+//     2026-04-02): they used 8973800–8974007 — 137 rebills, $28,595.59, with
+//     125 issued in a single day. STAT is winding down but may still file, so
+//     starting just above their high-water mark is not enough headroom; one
+//     more normal batch would run straight through it. Hence 8980000, which
+//     leaves ~6k of clearance while staying in the 897xxxx family Walmart
+//     already accepts.
+//
+//  2. Our own already-issued rebills. Numbers handed to Walmart on a past
+//     export can never be reused, so the next number must also clear the
+//     highest one we've assigned. See minSafeNewInvoice().
+const STAT_HIGH_WATER = 8974007;
+const DEFAULT_NEXT_NEW_INVOICE = 8980000;
+
 function getWalmartConfig() {
   const saved = readJson('walmart.json', null);
   return {
     vendorNumber: '540153',
     dept: '92',
     seq: '1',
-    nextNewInvoice: 8974100, // rolling rebill invoice number for disputes
+    nextNewInvoice: DEFAULT_NEXT_NEW_INVOICE, // rolling rebill invoice number for disputes
     ...(saved || {}),
   };
 }
 
 function saveWalmartConfig(cfg) {
   writeJson('walmart.json', cfg);
+}
+
+/**
+ * The lowest rebill number that is safe to issue next: clear of STAT's block
+ * and of every rebill we've already handed to Walmart. The export floors its
+ * counter at this, so a stale or hand-edited config can't reissue a number.
+ */
+function minSafeNewInvoice() {
+  const assigned = getClaims()
+    .claims.map((c) => parseInt(c.newInvoice, 10))
+    .filter((n) => Number.isInteger(n));
+  return Math.max(STAT_HIGH_WATER + 1, ...assigned.map((n) => n + 1));
 }
 
 // --- Dispute claims (the disputes pipeline) --------------------------------
@@ -234,6 +266,9 @@ module.exports = {
   saveAccounts,
   getWalmartConfig,
   saveWalmartConfig,
+  minSafeNewInvoice,
+  STAT_HIGH_WATER,
+  DEFAULT_NEXT_NEW_INVOICE,
   getClaims,
   saveClaims,
   addClaims,

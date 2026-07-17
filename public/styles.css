@@ -213,6 +213,16 @@ select, input[type="text"] {
 select:focus, input:focus { outline: none; border-color: var(--accent); }
 select.clstatus { padding: 5px 8px; font-size: 12.5px; border-radius: 8px; }
 
+/* ---- Settings ---- */
+.set-row { display: grid; grid-template-columns: 200px 1fr; gap: 14px; align-items: baseline;
+  padding: 14px; border: 0.5px solid var(--hairline); border-radius: 14px; background: var(--surface-2);
+  margin-bottom: 10px; }
+.set-row label { font-weight: 500; font-size: 14px; }
+.set-row .set-hint { display: block; margin-top: 6px; color: var(--text-2); font-size: 12.5px; line-height: 1.5; }
+.set-row input[type="text"] { width: 100%; max-width: 260px; box-sizing: border-box; }
+.set-row input.bad { border-color: var(--critical); }
+@media (max-width: 720px) { .set-row { grid-template-columns: 1fr; } }
+
 /* ---- Toast ---- */
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
