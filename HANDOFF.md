@@ -178,16 +178,18 @@ sample-data/       sample checks
    See "Rebill numbering" above.
 3. ~~Resolve the "wrong total" on the 2nd posted check~~ — **DONE 2026-07-17,
    the total is correct.** See "Real posts completed" above.
-4. **Repayment matching gap (found 2026-07-17, not yet fixed).**
-   `store.matchRepayments()` matches a repayment to a claim by the **original**
-   invoice number, but STAT's recovery mechanism re-invoices under a **new**
-   number (the `newInvoice` we assign). If Walmart's repayment remittance
-   references the rebill number, auto-recovery silently never matches and claims
-   sit "filed" forever despite being paid. Related: a repayment row with no
-   deduction code and a positive amount classifies as `payment` in
-   `allocator.js`, so it'd be treated as an invoice payment and fail invoice
-   lookup. **Confirm against a real repayment remittance before changing the
-   matching logic** — we haven't seen one yet.
+4. ~~Repayment matching gap~~ — **BUILT 2026-07-17.** The recovery loop now
+   allocates a repayment back to its deduction. `store.getRebillIndex()` maps
+   each issued rebill "New Inv #" to its original claim; the allocator uses it to
+   reclassify a positive line on a rebill number as a **repayment** (not a
+   payment), so it books `+Disputed AR` tagged to the original invoice and never
+   does a phantom-invoice lookup. `matchRepayments()` ties a repayment to a claim
+   by **either** the rebill number **or** the original invoice+code, so it works
+   whichever number Walmart references. Partial recovery is tracked
+   (`recoveredAmount` accumulates; claim flips to `recovered` only when covered,
+   else `partial`). **Still open:** confirm against a real Walmart repayment
+   remittance — none seen yet. Matching both invoice numbers is the hedge; grab
+   the first real recovery file and verify auto-close before fully trusting it.
 5. **Walmart takes the 2% early-pay discount on the PRE-promo invoice amount**
    (verified on 003983648: inv 46192 → 2% of $702.16 = $14.04, not 2% of the
    $695.14 face). Costs ~20–35¢ per invoice carrying a promo line. This is a
