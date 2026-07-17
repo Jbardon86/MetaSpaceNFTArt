@@ -147,12 +147,22 @@ function render(data) {
   }
   rw.innerHTML = notes;
 
+  // A check posted before the Disputes tab existed has its disputes sitting in
+  // Disputed AR untracked. Offer to record them — this posts nothing.
+  const canBackfill = data.alreadyPosted && unclassified.length === 0 && (plan.disputes || []).length > 0;
+  $('backfillBtn').classList.toggle('hidden', !canBackfill);
+  if (canBackfill) {
+    const n = plan.disputes.length;
+    $('backfillBtn').textContent = `Record ${n} dispute${n === 1 ? '' : 's'}`;
+  }
+
   // buttons
   const canPost = state.connected && unclassified.length === 0 && r.balanced && !data.alreadyPosted;
   $('postBtn').disabled = !canPost;
   $('postHint').textContent = !state.connected ? 'Connect QuickBooks first'
     : unclassified.length ? 'Classify the new codes first'
     : !r.balanced ? 'Does not balance — not safe to post'
+    : canBackfill ? 'Already posted — you can still track its disputes (nothing is posted)'
     : data.alreadyPosted ? 'This check was already posted'
     : 'Posts a Receive Payment + Bank Deposit';
 
@@ -218,6 +228,27 @@ async function doPost(dryRun) {
     toast(err.message, true);
   } finally {
     btn.disabled = false;
+  }
+}
+
+async function doBackfill() {
+  const btn = $('backfillBtn');
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Recording…';
+  try {
+    const r = await api('/api/backfill-claims', { method: 'POST' });
+    if (r.added === 0) {
+      toast(`Check ${r.checkNumber}: its ${r.disputes} dispute${r.disputes === 1 ? '' : 's'} were already tracked.`);
+    } else {
+      toast(`Recorded ${r.added} dispute${r.added === 1 ? '' : 's'} from check ${r.checkNumber}. Nothing was posted.`);
+    }
+    showDisputes();
+  } catch (err) {
+    toast(err.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
   }
 }
 
@@ -475,6 +506,7 @@ $('exportClaimsBtn').addEventListener('click', exportClaims);
 $('connectBtn').addEventListener('click', () => (window.location.href = '/auth/connect'));
 $('disconnectBtn').addEventListener('click', async () => { await api('/api/disconnect', { method: 'POST' }); refreshStatus(); });
 $('dryRunBtn').addEventListener('click', () => doPost(true));
+$('backfillBtn').addEventListener('click', doBackfill);
 $('postBtn').addEventListener('click', () => { if (confirm('Post this Receive Payment and Bank Deposit to QuickBooks?')) doPost(false); });
 $('startOverBtn').addEventListener('click', () => location.reload());
 $('logoutBtn').addEventListener('click', async () => { await fetch('/logout', { method: 'POST' }).catch(() => {}); location.href = '/login'; });

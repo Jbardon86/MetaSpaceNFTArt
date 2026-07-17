@@ -468,6 +468,45 @@ app.get(
   })
 );
 
+// --- Backfill --------------------------------------------------------------
+//
+// The Disputes tab only records going forward, from a real post. Checks posted
+// before that module existed have their disputes sitting in Disputed AR with no
+// claim tracking them for recovery. This re-reads the original remittance and
+// records those claims from the same allocation the post used.
+//
+// It never calls QuickBooks — no deps are built, so it cannot post by
+// construction. addClaims is idempotent by check/invoice/code, so running it
+// twice is harmless.
+app.post(
+  '/api/backfill-claims',
+  wrap(async (req, res) => {
+    const plan = buildPlanFromSession(req);
+    const checkNumber = plan.meta.checkNumber;
+
+    // Only for checks already in QuickBooks. An unposted check should go
+    // through the normal post, which records its claims automatically —
+    // backfilling one would show disputes with nothing behind them.
+    if (!store.isAlreadyPosted(checkNumber)) {
+      throw badRequest(
+        `Check ${checkNumber} hasn't been posted yet, so there's nothing to backfill. ` +
+          `Post it normally and its disputes are recorded automatically.`
+      );
+    }
+    if (plan.unclassified.length) {
+      throw badRequest('Classify the remaining deduction codes first so every dispute is recorded.');
+    }
+
+    const before = store.getClaims().claims.length;
+    // Date the claims from the original post, not from now.
+    const entry = (store.getLedger().posted || []).find((p) => p.reference === checkNumber);
+    recordClaimsForCheck(plan, (entry && entry.postedAt) || new Date().toISOString());
+    const added = store.getClaims().claims.length - before;
+
+    res.json({ ok: true, checkNumber, added, disputes: (plan.disputes || []).length });
+  })
+);
+
 // --- Post ------------------------------------------------------------------
 
 app.post(
