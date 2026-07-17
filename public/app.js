@@ -317,13 +317,22 @@ async function loadClaims() {
         ? `${money(c.amount)}<div class="acct small">${money(rec)} back</div>`
         : money(c.amount);
       const ds = c.docsStatus || { complete: false };
-      const has = (k) => c.docs && c.docs[k] && c.docs[k].have;
+      const id = esc(c.id);
+      const idEnc = encodeURIComponent(c.id);
+      const pod = c.docs && c.docs.pod;
+      const podControls = pod && pod.have
+        ? `<a href="/api/claims/${idEnc}/doc/pod" target="_blank" rel="noopener">${pod.kind === 'link' ? 'view link' : esc(pod.filename || 'file')}</a>
+           <button class="linkbtn" data-act="remove-pod" data-id="${id}">remove</button>`
+        : `<button class="btn tiny" data-act="upload-pod" data-id="${id}">Upload</button>
+           <button class="btn tiny ghost" data-act="linkform-pod" data-id="${id}">Link</button>
+           <input type="file" class="pod-file" data-id="${id}" hidden accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff">`;
       const docsCell = done
         ? '<span class="acct">—</span>'
         : `<div class="docs">
-             <span class="pill ${ds.complete ? 'ok' : 'warn'}">${ds.complete ? 'Docs ready' : 'Needs docs'}</span>
-             <label class="docchk"><input type="checkbox" class="docbox" data-id="${esc(c.id)}" data-doc="pod" ${has('pod') ? 'checked' : ''}> POD</label>
-             <label class="docchk"><input type="checkbox" class="docbox" data-id="${esc(c.id)}" data-doc="invoice" ${has('invoice') ? 'checked' : ''}> Invoice</label>
+             <span class="pill ${ds.complete ? 'ok' : 'warn'}">${ds.complete ? 'Docs ready' : 'Needs BOL'}</span>
+             <div class="docline"><span class="doclabel">BOL</span> ${podControls}</div>
+             <div class="docline podlink hidden"><input type="url" class="pod-linkinput" placeholder="paste BOL/POD link"><button class="btn tiny" data-act="save-podlink" data-id="${id}">Save</button></div>
+             <div class="docline"><span class="doclabel">Invoice</span> <a href="/api/claims/${idEnc}/invoice-pdf" target="_blank" rel="noopener">from QuickBooks</a></div>
            </div>`;
       return `<tr class="${done ? 'muted' : ''}">
         <td><input type="checkbox" class="clsel" data-id="${esc(c.id)}" ${c.status === 'ready' && ds.complete ? 'checked' : ''}></td>
@@ -347,16 +356,10 @@ async function loadClaims() {
         catch (err) { toast(err.message, true); }
       })
     );
-    body.querySelectorAll('.docbox').forEach((box) =>
-      box.addEventListener('change', async (e) => {
-        const { id, doc } = e.target.dataset;
-        const have = e.target.checked;
-        try {
-          await api(`/api/claims/${encodeURIComponent(id)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ docs: { [doc]: { have } } }) });
-          loadClaims();
-        } catch (err) { e.target.checked = !have; toast(err.message, true); }
-      })
-    );
+    body.querySelectorAll('[data-act]').forEach((el) =>
+      el.addEventListener('click', () => onDocAction(el.dataset.act, el.dataset.id, el)));
+    body.querySelectorAll('.pod-file').forEach((inp) =>
+      inp.addEventListener('change', (e) => uploadPod(inp.dataset.id, e.target.files[0])));
   } catch (err) {
     body.innerHTML = `<div class="banner warn">${esc(err.message)}</div>`;
   }
@@ -479,6 +482,52 @@ async function saveSettings() {
   } finally {
     btn.disabled = false;
   }
+}
+
+// --- claim documents (proof of delivery) -----------------------------------
+
+function onDocAction(act, id, el) {
+  const docs = el.closest('.docs');
+  if (act === 'upload-pod') {
+    docs.querySelector('.pod-file').click();
+  } else if (act === 'linkform-pod') {
+    const row = docs.querySelector('.podlink');
+    row.classList.remove('hidden');
+    row.querySelector('.pod-linkinput').focus();
+  } else if (act === 'save-podlink') {
+    savePodLink(id, docs.querySelector('.pod-linkinput').value.trim());
+  } else if (act === 'remove-pod') {
+    removePod(id);
+  }
+}
+
+async function uploadPod(id, file) {
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res = await fetch(`/api/claims/${encodeURIComponent(id)}/doc/pod`, { method: 'POST', body: fd });
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Upload failed'); }
+    toast('Proof of delivery uploaded.');
+    loadClaims();
+  } catch (err) { toast(err.message, true); }
+}
+
+async function savePodLink(id, ref) {
+  if (!ref) return toast('Paste a link first.', true);
+  try {
+    await api(`/api/claims/${encodeURIComponent(id)}/doc/pod-link`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ref }) });
+    toast('Linked the proof of delivery.');
+    loadClaims();
+  } catch (err) { toast(err.message, true); }
+}
+
+async function removePod(id) {
+  try {
+    const res = await fetch(`/api/claims/${encodeURIComponent(id)}/doc/pod`, { method: 'DELETE' });
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Remove failed'); }
+    loadClaims();
+  } catch (err) { toast(err.message, true); }
 }
 
 function showHistory() {

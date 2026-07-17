@@ -222,6 +222,48 @@ async function findInvoiceByDocNumber(docNumber) {
 }
 
 /**
+ * Fetch an invoice as a PDF (the actual document, for a dispute packet). QBO
+ * serves it from a dedicated endpoint that returns application/pdf rather than
+ * JSON, so this doesn't go through apiRequest. Returns a Buffer.
+ */
+async function getInvoicePdf(invoiceId) {
+  const tokens = await getValidToken();
+  const url =
+    `${config.qbo.apiBaseUrl}/v3/company/${tokens.realmId}/invoice/${encodeURIComponent(invoiceId)}/pdf` +
+    `?minorversion=${config.qbo.minorVersion}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 25000);
+  let res;
+  try {
+    res = await fetch(url, {
+      headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/pdf' },
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      const e = new Error('QuickBooks did not respond within 25s while fetching the invoice PDF.');
+      e.status = 504;
+      throw e;
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+  const tid = res.headers.get('intuit_tid') || null;
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    const e = new Error(
+      `Could not fetch the invoice PDF from QuickBooks (HTTP ${res.status})${tid ? ` [Intuit tid: ${tid}]` : ''}.`
+    );
+    e.status = res.status;
+    e.intuit_tid = tid;
+    e.body = detail;
+    throw e;
+  }
+  return Buffer.from(await res.arrayBuffer());
+}
+
+/**
  * Build a label -> account resolver from the live chart of accounts. Matches on
  * AcctNum first (via the known-numbers map), then on exact name (case
  * insensitive). Returns a function label -> id|null.
@@ -308,6 +350,7 @@ module.exports = {
   createCustomer,
   ensureCustomer,
   findInvoiceByDocNumber,
+  getInvoicePdf,
   buildAccountResolver,
   ensureWriteOffItem,
   createCreditMemo,

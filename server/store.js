@@ -178,21 +178,72 @@ function getClaims() {
 }
 
 // Supporting documents a dispute needs before it can be filed. Walmart denies a
-// shortage claim without proof the goods shipped and were received, so a claim
-// isn't fileable until these are in hand. Each is tracked on the claim as
-// `claim.docs[key] = { have: bool, ref: string }`.
-const REQUIRED_DOCS = [
-  { key: 'pod', label: 'Proof of delivery (BOL/POD)' },
-  { key: 'invoice', label: 'Original invoice' },
-];
+// shortage claim without proof the goods shipped and were received. The original
+// invoice is pulled live from QuickBooks on demand (we posted against it, so it
+// always exists there), so the only document the user has to supply is the
+// proof of delivery — a BOL/POD, either uploaded or linked. Tracked on the claim
+// as `claim.docs.pod = { have, kind: 'file'|'link', ... }`.
+const REQUIRED_DOCS = [{ key: 'pod', label: 'Proof of delivery (BOL/POD)' }];
 
 /**
- * Whether a claim's supporting documents are all in hand, and which are missing.
+ * Whether a claim's user-supplied documents are in hand, and which are missing.
+ * (The invoice is not listed — it's fetched from QuickBooks, not supplied here.)
  */
 function claimDocsStatus(claim) {
   const docs = (claim && claim.docs) || {};
   const missing = REQUIRED_DOCS.filter((d) => !(docs[d.key] && docs[d.key].have));
   return { complete: missing.length === 0, missing: missing.map((d) => d.label) };
+}
+
+// --- Claim document files (proof of delivery uploads) ----------------------
+// Stored under DATA_DIR/docs/<claimId>/ so they live on the persistent disk.
+// The app is a convenience copy, not the system of record — the originals live
+// in the fulfillment system / carrier / QuickBooks.
+
+function docDir(claimId) {
+  const safe = String(claimId).replace(/[^A-Za-z0-9._-]/g, '_');
+  return path.join(DATA_DIR, 'docs', safe);
+}
+
+/**
+ * Persist an uploaded document (multer memory file) for a claim and return the
+ * metadata to store on the claim. `file` = { originalname, mimetype, size, buffer }.
+ */
+function saveClaimDoc(claimId, key, file) {
+  const dir = docDir(claimId);
+  fs.mkdirSync(dir, { recursive: true });
+  const ext = String(path.extname(file.originalname || '')).replace(/[^.A-Za-z0-9]/g, '').slice(0, 10);
+  const storedName = `${key}${ext}`;
+  fs.writeFileSync(path.join(dir, storedName), file.buffer);
+  return {
+    have: true,
+    kind: 'file',
+    filename: String(file.originalname || storedName).slice(0, 200),
+    mime: file.mimetype || 'application/octet-stream',
+    size: file.size || (file.buffer ? file.buffer.length : 0),
+    storedName,
+    uploadedAt: new Date().toISOString(),
+  };
+}
+
+/** Read a stored document back. Returns a Buffer, or null if missing. */
+function readClaimDoc(claimId, storedName) {
+  const p = path.join(docDir(claimId), path.basename(String(storedName)));
+  try {
+    return fs.readFileSync(p);
+  } catch (_) {
+    return null;
+  }
+}
+
+/** Remove a stored document file (used when replacing with a link or deleting). */
+function deleteClaimDoc(claimId, storedName) {
+  if (!storedName) return;
+  try {
+    fs.unlinkSync(path.join(docDir(claimId), path.basename(String(storedName))));
+  } catch (_) {
+    /* already gone */
+  }
 }
 
 /**
@@ -331,6 +382,9 @@ module.exports = {
   getRebillIndex,
   REQUIRED_DOCS,
   claimDocsStatus,
+  saveClaimDoc,
+  readClaimDoc,
+  deleteClaimDoc,
   saveClaims,
   addClaims,
   updateClaim,

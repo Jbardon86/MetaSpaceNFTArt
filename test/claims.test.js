@@ -78,14 +78,24 @@ test('matchRepayments handles a PARTIAL recovery, then completes it', () => {
 
 // --- Filing failsafe: supporting documents --------------------------------
 
-test('claimDocsStatus reports missing docs until both are in hand', () => {
-  assert.strictEqual(store.claimDocsStatus({}).complete, false); // no docs at all
-  assert.strictEqual(store.claimDocsStatus({ docs: { pod: { have: true } } }).complete, false); // only POD
-  const partial = store.claimDocsStatus({ docs: { pod: { have: true } } });
-  assert.ok(partial.missing.some((m) => /invoice/i.test(m)));
-  const done = store.claimDocsStatus({ docs: { pod: { have: true }, invoice: { have: true } } });
-  assert.strictEqual(done.complete, true);
-  assert.strictEqual(done.missing.length, 0);
+test('claimDocsStatus needs the proof of delivery (invoice comes from QBO)', () => {
+  const none = store.claimDocsStatus({});
+  assert.strictEqual(none.complete, false);
+  assert.ok(none.missing.some((m) => /delivery|BOL|POD/i.test(m)));
+  // A BOL/POD in hand is all the user must supply — the invoice is pulled from QBO.
+  assert.strictEqual(store.claimDocsStatus({ docs: { pod: { have: true } } }).complete, true);
+});
+
+test('saveClaimDoc/readClaimDoc round-trips an uploaded file', () => {
+  const file = { originalname: 'signed_bol.pdf', mimetype: 'application/pdf', size: 5, buffer: Buffer.from('hello') };
+  const meta = store.saveClaimDoc('970-46226-0022', 'pod', file);
+  assert.strictEqual(meta.have, true);
+  assert.strictEqual(meta.kind, 'file');
+  assert.strictEqual(meta.filename, 'signed_bol.pdf');
+  const back = store.readClaimDoc('970-46226-0022', meta.storedName);
+  assert.strictEqual(back.toString(), 'hello');
+  store.deleteClaimDoc('970-46226-0022', meta.storedName);
+  assert.strictEqual(store.readClaimDoc('970-46226-0022', meta.storedName), null);
 });
 
 test('an already fully-recovered claim is not matched again', () => {

@@ -429,6 +429,94 @@ app.post(
   })
 );
 
+// --- Claim documents (dispute proof) --------------------------------------
+
+function findClaimOr404(id) {
+  const claim = store.getClaims().claims.find((c) => c.id === id);
+  if (!claim) throw badRequest('Claim not found.');
+  return claim;
+}
+
+// The invoice document, pulled live from QuickBooks (we posted against it, so it
+// exists there). No upload needed — this is the "QBO invoice pull" half.
+app.get(
+  '/api/claims/:id/invoice-pdf',
+  wrap(async (req, res) => {
+    const claim = findClaimOr404(req.params.id);
+    if (!qbo.isConnected()) throw badRequest('Connect QuickBooks to pull the invoice PDF.');
+    const inv = await qbo.findInvoiceByDocNumber(claim.invoice);
+    if (!inv) throw badRequest(`Invoice ${claim.invoice} was not found in QuickBooks.`);
+    const pdf = await qbo.getInvoicePdf(inv.Id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="invoice_${claim.invoice}.pdf"`);
+    res.send(pdf);
+  })
+);
+
+// Upload a proof-of-delivery file (BOL/POD) for a claim.
+app.post(
+  '/api/claims/:id/doc/pod',
+  upload.single('file'),
+  wrap(async (req, res) => {
+    const claim = findClaimOr404(req.params.id);
+    if (!req.file) throw badRequest('No file uploaded.');
+    // Replace any previous file so we don't orphan it on disk.
+    if (claim.docs && claim.docs.pod && claim.docs.pod.kind === 'file') {
+      store.deleteClaimDoc(claim.id, claim.docs.pod.storedName);
+    }
+    const meta = store.saveClaimDoc(claim.id, 'pod', req.file);
+    const updated = store.updateClaim(claim.id, { docs: { ...(claim.docs || {}), pod: meta } });
+    res.json({ ok: true, claim: { ...updated, docsStatus: store.claimDocsStatus(updated) } });
+  })
+);
+
+// Point a claim's proof of delivery at a link instead of an uploaded file (for
+// PODs that live in the carrier portal or fulfillment system).
+app.post(
+  '/api/claims/:id/doc/pod-link',
+  wrap(async (req, res) => {
+    const claim = findClaimOr404(req.params.id);
+    const ref = String((req.body && req.body.ref) || '').trim();
+    if (!/^https?:\/\//i.test(ref)) throw badRequest('Enter a full link starting with http:// or https://');
+    if (claim.docs && claim.docs.pod && claim.docs.pod.kind === 'file') {
+      store.deleteClaimDoc(claim.id, claim.docs.pod.storedName);
+    }
+    const updated = store.updateClaim(claim.id, {
+      docs: { ...(claim.docs || {}), pod: { have: true, kind: 'link', ref, uploadedAt: new Date().toISOString() } },
+    });
+    res.json({ ok: true, claim: { ...updated, docsStatus: store.claimDocsStatus(updated) } });
+  })
+);
+
+// View a claim's proof of delivery — streams the file, or redirects to the link.
+app.get(
+  '/api/claims/:id/doc/pod',
+  wrap(async (req, res) => {
+    const claim = findClaimOr404(req.params.id);
+    const pod = claim.docs && claim.docs.pod;
+    if (!pod || !pod.have) throw badRequest('No proof of delivery on this claim yet.');
+    if (pod.kind === 'link') return res.redirect(pod.ref);
+    const buf = store.readClaimDoc(claim.id, pod.storedName);
+    if (!buf) throw badRequest('The stored document is missing from disk.');
+    res.setHeader('Content-Type', pod.mime || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `inline; filename="${String(pod.filename || 'bol').replace(/[^\w.\-]/g, '_')}"`);
+    res.send(buf);
+  })
+);
+
+// Remove a claim's proof of delivery.
+app.delete(
+  '/api/claims/:id/doc/pod',
+  wrap(async (req, res) => {
+    const claim = findClaimOr404(req.params.id);
+    if (claim.docs && claim.docs.pod && claim.docs.pod.kind === 'file') {
+      store.deleteClaimDoc(claim.id, claim.docs.pod.storedName);
+    }
+    const updated = store.updateClaim(claim.id, { docs: { ...(claim.docs || {}), pod: { have: false } } });
+    res.json({ ok: true, claim: { ...updated, docsStatus: store.claimDocsStatus(updated) } });
+  })
+);
+
 app.post(
   '/api/claims/:id',
   wrap(async (req, res) => {
