@@ -164,6 +164,26 @@ function buildPlanFromSession(req) {
   return allocateCheck(rem.rows, decoder, accounts, { checkNumber: rem.checkNumber, datePaid: rem.datePaid });
 }
 
+function recordClaimsForCheck(plan, postedAt) {
+  const checkNumber = plan.meta.checkNumber;
+  const entries = (plan.disputes || []).map((d) => ({
+    checkNumber,
+    postedAt,
+    datePaid: plan.meta.datePaid,
+    invoice: String(d.invoice),
+    code: d.code,
+    description: d.description,
+    amount: d.amount,
+    po: d.po || '',
+    whse: d.whse || '',
+    shipDate: d.shipDate || '',
+  }));
+  if (entries.length) store.addClaims(entries);
+  if (plan.repayments && plan.repayments.length) {
+    store.matchRepayments(plan.repayments, checkNumber);
+  }
+}
+
 // --- Status & auth ---------------------------------------------------------
 
 app.get(
@@ -258,6 +278,83 @@ app.get(
   })
 );
 
+// --- Disputes / claims -----------------------------------------------------
+
+function summarizeClaims(claims) {
+  const by = (s) => claims.filter((c) => c.status === s);
+  const sum = (list) => Math.round(list.reduce((a, c) => a + (Number(c.amount) || 0), 0) * 100) / 100;
+  const open = claims.filter((c) => !['recovered', 'denied', 'writeoff'].includes(c.status));
+  return {
+    count: claims.length,
+    openCount: open.length,
+    openAmount: sum(open),
+    recoveredAmount: sum(by('recovered')),
+    readyCount: by('ready').length,
+    filedCount: by('filed').length,
+  };
+}
+
+app.get(
+  '/api/claims',
+  wrap(async (req, res) => {
+    const claims = store.getClaims().claims.slice().reverse();
+    res.json({ claims, totals: summarizeClaims(claims) });
+  })
+);
+
+// Export selected (or all open) claims as a Walmart Recovery Submission .xlsx.
+// NOTE: must be declared before '/api/claims/:id' so "export" isn't read as an id.
+app.post(
+  '/api/claims/export',
+  wrap(async (req, res) => {
+    const ExcelJS = require('exceljs');
+    const cfg = store.getWalmartConfig();
+    const all = store.getClaims();
+    const ids = req.body && Array.isArray(req.body.ids) ? new Set(req.body.ids) : null;
+    const selected = all.claims.filter((c) =>
+      ids ? ids.has(c.id) : !['recovered', 'denied', 'writeoff'].includes(c.status)
+    );
+    if (!selected.length) throw badRequest('No claims to export.');
+
+    // Assign a rebill (New Inv #) to any claim that doesn't have one yet.
+    let next = cfg.nextNewInvoice;
+    for (const c of selected) {
+      if (!c.newInvoice) {
+        c.newInvoice = String(next++);
+        store.updateClaim(c.id, { newInvoice: c.newInvoice, status: c.status === 'ready' ? 'filed' : c.status });
+      }
+    }
+    store.saveWalmartConfig({ ...cfg, nextNewInvoice: next });
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('RecoverySubmission');
+    ws.addRow(['PO Number', 'Vendor #', 'Dept', 'Seq', 'Whse', 'Ship Date', 'Orig Inv #', 'New Inv #', 'Amt To Submit']);
+    for (const c of selected) {
+      ws.addRow([c.po, cfg.vendorNumber, cfg.dept, cfg.seq, c.whse, c.shipDate, c.invoice, c.newInvoice, c.amount]);
+    }
+    const buf = await wb.xlsx.writeBuffer();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="Recovery_Submission_${cfg.vendorNumber}.xlsx"`);
+    res.send(Buffer.from(buf));
+  })
+);
+
+app.post(
+  '/api/claims/:id',
+  wrap(async (req, res) => {
+    const allowed = ['ready', 'filed', 'research', 'recovered', 'denied', 'writeoff'];
+    const patch = {};
+    if (req.body.status) {
+      if (!allowed.includes(req.body.status)) throw badRequest('Unknown status.');
+      patch.status = req.body.status;
+    }
+    if (typeof req.body.notes === 'string') patch.notes = req.body.notes;
+    const claim = store.updateClaim(req.params.id, patch);
+    if (!claim) throw badRequest('Claim not found.');
+    res.json({ ok: true, claim });
+  })
+);
+
 // --- Analyze (upload -> plan -> dry-run review) ----------------------------
 
 app.post(
@@ -338,12 +435,20 @@ app.post(
     const report = await postPlan(plan, deps, { dryRun, today: plan.meta.datePaid });
 
     if (!dryRun) {
+      const postedAt = new Date().toISOString();
       store.recordPosted({
         reference: plan.meta.checkNumber,
         net: report.depositTotal,
-        postedAt: new Date().toISOString(),
+        postedAt,
         steps: report.steps,
       });
+      // Record each dispute as a claim, and mark any repaid claims recovered.
+      // Wrapped so a claims hiccup can never fail an already-successful post.
+      try {
+        recordClaimsForCheck(plan, postedAt);
+      } catch (err) {
+        console.error('claims recording failed (post still succeeded):', err);
+      }
     }
     res.json(report);
   })

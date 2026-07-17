@@ -109,6 +109,94 @@ function saveAccounts(accounts) {
   writeJson('accounts.json', accounts);
 }
 
+// --- Walmart submission config (for the Recovery Submission export) --------
+
+function getWalmartConfig() {
+  const saved = readJson('walmart.json', null);
+  return {
+    vendorNumber: '540153',
+    dept: '92',
+    seq: '1',
+    nextNewInvoice: 8974100, // rolling rebill invoice number for disputes
+    ...(saved || {}),
+  };
+}
+
+function saveWalmartConfig(cfg) {
+  writeJson('walmart.json', cfg);
+}
+
+// --- Dispute claims (the disputes pipeline) --------------------------------
+//
+// Each disputed deduction becomes a claim that moves through stages:
+//   'ready'      -> ready to dispute (default when a check is posted)
+//   'filed'      -> submitted to Walmart
+//   'research'   -> Walmart researching
+//   'recovered'  -> Walmart paid it back
+//   'denied'     -> dispute rejected
+//   'writeoff'   -> given up / written off
+
+function getClaims() {
+  return readJson('claims.json', { claims: [] });
+}
+
+function saveClaims(data) {
+  writeJson('claims.json', data);
+}
+
+function claimId(checkNumber, invoice, code) {
+  return `${checkNumber || 'na'}-${invoice || 'na'}-${code || 'na'}`;
+}
+
+/**
+ * Add claims for a posted check's disputes. Idempotent by id — re-posting or
+ * re-recording the same check won't duplicate claims.
+ */
+function addClaims(entries) {
+  const data = getClaims();
+  const byId = new Map(data.claims.map((c) => [c.id, c]));
+  for (const e of entries) {
+    const id = claimId(e.checkNumber, e.invoice, e.code);
+    if (byId.has(id)) continue;
+    const claim = { id, status: 'ready', ...e };
+    data.claims.push(claim);
+    byId.set(id, claim);
+  }
+  saveClaims(data);
+  return data;
+}
+
+function updateClaim(id, patch) {
+  const data = getClaims();
+  const claim = data.claims.find((c) => c.id === id);
+  if (!claim) return null;
+  Object.assign(claim, patch);
+  saveClaims(data);
+  return claim;
+}
+
+/**
+ * Given the repayments on a freshly-posted check, mark any matching open claims
+ * as recovered (matched by invoice + code).
+ */
+function matchRepayments(repayments, checkNumber) {
+  if (!repayments || !repayments.length) return [];
+  const data = getClaims();
+  const matched = [];
+  for (const r of repayments) {
+    const claim = data.claims.find(
+      (c) => c.invoice === String(r.invoice) && (!r.code || c.code === r.code) && c.status !== 'recovered'
+    );
+    if (claim) {
+      claim.status = 'recovered';
+      claim.recoveredOnCheck = checkNumber;
+      matched.push(claim);
+    }
+  }
+  if (matched.length) saveClaims(data);
+  return matched;
+}
+
 // --- Posted-check ledger (duplicate guard) ---------------------------------
 
 function getLedger() {
@@ -144,6 +232,13 @@ module.exports = {
   upsertCode,
   getAccounts,
   saveAccounts,
+  getWalmartConfig,
+  saveWalmartConfig,
+  getClaims,
+  saveClaims,
+  addClaims,
+  updateClaim,
+  matchRepayments,
   getLedger,
   recordPosted,
   isAlreadyPosted,

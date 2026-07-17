@@ -130,7 +130,15 @@ function allocateCheck(rows, decoder, accounts = {}, meta = {}) {
     } else if (c.category === 'accept') {
       g.accepted = round2(g.accepted + Math.abs(Number(row.amountPaid) || 0));
     } else if (c.category === 'dispute') {
-      g.disputed.push({ code: c.code, description: c.description, amount: round2(Math.abs(row.amountPaid)) });
+      g.disputed.push({
+        code: c.code,
+        description: c.description,
+        amount: round2(Math.abs(row.amountPaid)),
+        // claim fields (for the dispute pipeline / Recovery Submission export)
+        po: row.po || g.po,
+        whse: row.dc || row.store,
+        shipDate: row.invoiceDate,
+      });
     }
   }
 

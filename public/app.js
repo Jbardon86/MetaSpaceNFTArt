@@ -240,7 +240,86 @@ function renderResults(report, dryRun) {
 
 function setNav(view) {
   $('navImport').classList.toggle('active', view === 'import');
+  $('navDisputes').classList.toggle('active', view === 'disputes');
   $('navHistory').classList.toggle('active', view === 'history');
+}
+
+const CLAIM_STATUSES = [
+  ['ready', 'Ready to file'],
+  ['filed', 'Filed'],
+  ['research', 'In research'],
+  ['recovered', 'Recovered'],
+  ['denied', 'Denied'],
+  ['writeoff', 'Written off'],
+];
+
+function showDisputes() {
+  setNav('disputes');
+  document.querySelectorAll('main > .step').forEach((s) => s.classList.add('hidden'));
+  hide('sandboxBar');
+  show('step-disputes');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  loadClaims();
+}
+
+async function loadClaims() {
+  const body = $('disputesBody');
+  body.innerHTML = '<p class="sub">Loading…</p>';
+  try {
+    const { claims, totals } = await api('/api/claims');
+    $('disputeTotals').innerHTML =
+      tile('Open claims', totals.openCount) +
+      tile('Open $', money(totals.openAmount), totals.openAmount ? 'bad' : '') +
+      tile('Recovered $', money(totals.recoveredAmount), 'good');
+    if (!claims.length) {
+      body.innerHTML = '<p class="sub">No disputes yet. They show up here automatically when you post a check that has disputable deductions.</p>';
+      return;
+    }
+    const rows = claims.map((c) => {
+      const opts = CLAIM_STATUSES.map(([v, l]) => `<option value="${v}" ${c.status === v ? 'selected' : ''}>${l}</option>`).join('');
+      const done = ['recovered', 'denied', 'writeoff'].includes(c.status);
+      return `<tr class="${done ? 'muted' : ''}">
+        <td><input type="checkbox" class="clsel" data-id="${esc(c.id)}" ${c.status === 'ready' ? 'checked' : ''}></td>
+        <td>${esc(c.invoice)}</td>
+        <td class="acct">${esc(c.po || '—')}</td>
+        <td>[${esc(c.code)}]</td>
+        <td class="num neg">${money(c.amount)}</td>
+        <td class="acct">${esc(c.shipDate || '—')}</td>
+        <td class="acct">${esc(c.checkNumber || '—')}</td>
+        <td><select class="clstatus" data-id="${esc(c.id)}">${opts}</select></td>
+        <td class="acct">${esc(c.newInvoice || '—')}</td>
+      </tr>`;
+    }).join('');
+    body.innerHTML =
+      `<div class="tbl-wrap"><table>
+        <thead><tr><th></th><th>Invoice</th><th>PO</th><th>Code</th><th class="num">Amount</th><th>Ship date</th><th>Check</th><th>Status</th><th>New Inv #</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>`;
+    body.querySelectorAll('.clstatus').forEach((sel) =>
+      sel.addEventListener('change', async (e) => {
+        try { await api(`/api/claims/${encodeURIComponent(e.target.dataset.id)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: e.target.value }) }); loadClaims(); }
+        catch (err) { toast(err.message, true); }
+      })
+    );
+  } catch (err) {
+    body.innerHTML = `<div class="banner warn">${esc(err.message)}</div>`;
+  }
+}
+
+async function exportClaims() {
+  const ids = Array.from(document.querySelectorAll('.clsel')).filter((c) => c.checked).map((c) => c.dataset.id);
+  try {
+    const res = await fetch('/api/claims/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) });
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Export failed'); }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'Recovery_Submission.xlsx'; a.click();
+    URL.revokeObjectURL(url);
+    toast('Exported. Claims marked Filed. File it in Retail Link.');
+    loadClaims();
+  } catch (err) {
+    toast(err.message, true);
+  }
 }
 
 function showHistory() {
@@ -255,6 +334,7 @@ function showHistory() {
 function showImport() {
   setNav('import');
   hide('step-history');
+  hide('step-disputes');
   show('step-upload');
   refreshStatus().catch(() => {});
 }
@@ -291,7 +371,9 @@ async function loadHistory() {
 // --- wiring ----------------------------------------------------------------
 
 $('navImport').addEventListener('click', showImport);
+$('navDisputes').addEventListener('click', showDisputes);
 $('navHistory').addEventListener('click', showHistory);
+$('exportClaimsBtn').addEventListener('click', exportClaims);
 $('connectBtn').addEventListener('click', () => (window.location.href = '/auth/connect'));
 $('disconnectBtn').addEventListener('click', async () => { await api('/api/disconnect', { method: 'POST' }); refreshStatus(); });
 $('dryRunBtn').addEventListener('click', () => doPost(true));

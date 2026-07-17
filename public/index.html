@@ -17,6 +17,7 @@
       </div>
       <nav class="nav">
         <button class="navbtn active" id="navImport">Import</button>
+        <button class="navbtn" id="navDisputes">Disputes</button>
         <button class="navbtn" id="navHistory">History</button>
       </nav>
       <div class="connection">
@@ -94,6 +95,20 @@
           <button class="btn ghost" id="dryRunBtn">Preview</button>
           <span id="postHint" class="hint"></span>
         </div>
+      </section>
+
+      <!-- Disputes -->
+      <section class="card step hidden" id="step-disputes">
+        <div class="eyebrow">Disputes</div>
+        <h1>Deduction disputes</h1>
+        <p class="sub">Every disputed deduction from your posted checks, tracked from ready-to-file through
+          recovered. Export a Walmart Recovery Submission for the ones you're ready to file.</p>
+        <div id="disputeTotals" class="tiles"></div>
+        <div class="actions" style="margin-top:0">
+          <button class="btn primary" id="exportClaimsBtn">Export Recovery Submission</button>
+          <span class="hint">Exports open (or selected) claims as the Walmart .xlsx</span>
+        </div>
+        <div id="disputesBody"></div>
       </section>
 
       <!-- History -->
