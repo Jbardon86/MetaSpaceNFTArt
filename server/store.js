@@ -9,6 +9,10 @@ const path = require('path');
 const defaultDecoder = require('./defaultDecoder');
 const defaultAccounts = require('./defaultAccounts');
 
+function round2(n) {
+  return Math.round(((Number(n) || 0) + Number.EPSILON) * 100) / 100;
+}
+
 // Where persisted files live. Override with DATA_DIR when hosted so it points
 // at a persistent disk (Render, etc.) that survives restarts/redeploys.
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
@@ -164,12 +168,28 @@ function minSafeNewInvoice() {
 //   'ready'      -> ready to dispute (default when a check is posted)
 //   'filed'      -> submitted to Walmart
 //   'research'   -> Walmart researching
-//   'recovered'  -> Walmart paid it back
+//   'partial'    -> Walmart paid back part of it; the rest is still open
+//   'recovered'  -> Walmart paid it back in full
 //   'denied'     -> dispute rejected
 //   'writeoff'   -> given up / written off
 
 function getClaims() {
   return readJson('claims.json', { claims: [] });
+}
+
+/**
+ * Lookup from a rebill "New Inv #" we've issued -> the original claim it stands
+ * for. A recovered dispute comes back from Walmart under the rebill number, so
+ * this is how a repayment line is tied back to the original invoice + code.
+ */
+function getRebillIndex() {
+  const index = {};
+  for (const c of getClaims().claims) {
+    if (c.newInvoice) {
+      index[String(c.newInvoice)] = { invoice: c.invoice, code: c.code, description: c.description };
+    }
+  }
+  return index;
 }
 
 function saveClaims(data) {
@@ -209,21 +229,41 @@ function updateClaim(id, patch) {
 
 /**
  * Given the repayments on a freshly-posted check, mark any matching open claims
- * as recovered (matched by invoice + code).
+ * as recovered. A repayment is tied to a claim by EITHER:
+ *   - the rebill "New Inv #" we issued (how Walmart most likely references a
+ *     recovered dispute, since it was re-invoiced under that number), or
+ *   - the original invoice + code (in case the remittance references the
+ *     original instead).
+ * Matching both keys means recovery works without us having to know in advance
+ * which number Walmart's repayment remittance uses.
+ *
+ * Recovery can be partial: `recoveredAmount` accumulates the cash returned, and
+ * the claim only flips to 'recovered' once that covers the full amount (penny
+ * tolerance). Until then it's 'partial' and stays open for the remainder.
  */
 function matchRepayments(repayments, checkNumber) {
   if (!repayments || !repayments.length) return [];
   const data = getClaims();
   const matched = [];
   for (const r of repayments) {
-    const claim = data.claims.find(
-      (c) => c.invoice === String(r.invoice) && (!r.code || c.code === r.code) && c.status !== 'recovered'
-    );
-    if (claim) {
-      claim.status = 'recovered';
-      claim.recoveredOnCheck = checkNumber;
-      matched.push(claim);
-    }
+    const rInv = String(r.invoice == null ? '' : r.invoice).trim();
+    const rRebill = String(r.rebillInvoice == null ? '' : r.rebillInvoice).trim();
+    const amount = Math.abs(Number(r.amount) || 0);
+
+    const claim = data.claims.find((c) => {
+      if (c.status === 'recovered') return false; // already fully recovered
+      const byRebill =
+        c.newInvoice && (String(c.newInvoice) === rRebill || String(c.newInvoice) === rInv);
+      const byOriginal =
+        String(c.invoice) === rInv && rInv !== '' && (!r.code || String(c.code) === String(r.code));
+      return byRebill || byOriginal;
+    });
+    if (!claim) continue;
+
+    claim.recoveredAmount = round2((Number(claim.recoveredAmount) || 0) + amount);
+    claim.recoveredOnCheck = checkNumber;
+    claim.status = claim.recoveredAmount + 0.005 >= Number(claim.amount) ? 'recovered' : 'partial';
+    matched.push(claim);
   }
   if (matched.length) saveClaims(data);
   return matched;
@@ -270,6 +310,7 @@ module.exports = {
   STAT_HIGH_WATER,
   DEFAULT_NEXT_NEW_INVOICE,
   getClaims,
+  getRebillIndex,
   saveClaims,
   addClaims,
   updateClaim,

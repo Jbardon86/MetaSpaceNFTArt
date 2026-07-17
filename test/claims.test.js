@@ -36,6 +36,56 @@ test('matchRepayments marks a matching open claim recovered', () => {
   assert.strictEqual(claim.recoveredOnCheck, '910');
 });
 
+// --- Recovery matching by the rebill number Walmart pays back on ------------
+
+test('getRebillIndex maps issued rebill numbers to their original claim', () => {
+  store.addClaims([{ checkNumber: '930', invoice: '46226', code: '0022', amount: 9.52, description: 'MBNS' }]);
+  store.updateClaim('930-46226-0022', { newInvoice: '8980500' });
+  const idx = store.getRebillIndex();
+  assert.strictEqual(idx['8980500'].invoice, '46226');
+  assert.strictEqual(idx['8980500'].code, '0022');
+});
+
+test('matchRepayments recovers a claim by its rebill number (no code needed)', () => {
+  store.addClaims([{ checkNumber: '931', invoice: '46300', code: '0022', amount: 25 }]);
+  store.updateClaim('931-46300-0022', { newInvoice: '8980600', status: 'filed' });
+  // Repayment arrives referencing the rebill number, no code — as classified
+  // by the allocator's rebill path.
+  const matched = store.matchRepayments([{ invoice: '46300', rebillInvoice: '8980600', amount: 25 }], '940');
+  assert.strictEqual(matched.length, 1);
+  const claim = store.getClaims().claims.find((c) => c.id === '931-46300-0022');
+  assert.strictEqual(claim.status, 'recovered');
+  assert.strictEqual(claim.recoveredAmount, 25);
+  assert.strictEqual(claim.recoveredOnCheck, '940');
+});
+
+test('matchRepayments handles a PARTIAL recovery, then completes it', () => {
+  store.addClaims([{ checkNumber: '932', invoice: '46400', code: '0022', amount: 40 }]);
+  store.updateClaim('932-46400-0022', { newInvoice: '8980700', status: 'filed' });
+
+  // First remittance pays back part of it.
+  store.matchRepayments([{ rebillInvoice: '8980700', amount: 15 }], '950');
+  let claim = store.getClaims().claims.find((c) => c.id === '932-46400-0022');
+  assert.strictEqual(claim.status, 'partial');
+  assert.strictEqual(claim.recoveredAmount, 15);
+
+  // A later remittance pays the rest → fully recovered.
+  store.matchRepayments([{ rebillInvoice: '8980700', amount: 25 }], '951');
+  claim = store.getClaims().claims.find((c) => c.id === '932-46400-0022');
+  assert.strictEqual(claim.status, 'recovered');
+  assert.strictEqual(claim.recoveredAmount, 40);
+});
+
+test('an already fully-recovered claim is not matched again', () => {
+  store.addClaims([{ checkNumber: '933', invoice: '46500', code: '0022', amount: 10 }]);
+  store.updateClaim('933-46500-0022', { newInvoice: '8980800' });
+  store.matchRepayments([{ rebillInvoice: '8980800', amount: 10 }], '960');
+  const again = store.matchRepayments([{ rebillInvoice: '8980800', amount: 10 }], '961');
+  assert.strictEqual(again.length, 0);
+  const claim = store.getClaims().claims.find((c) => c.id === '933-46500-0022');
+  assert.strictEqual(claim.recoveredAmount, 10); // not double-counted
+});
+
 test('walmart config has the Recovery Submission defaults', () => {
   const cfg = store.getWalmartConfig();
   assert.strictEqual(cfg.vendorNumber, '540153');

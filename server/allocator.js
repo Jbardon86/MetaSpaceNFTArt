@@ -44,9 +44,29 @@ function extractCode(text) {
  * Classify a single remittance row.
  * `row` fields used: invoice, amountPaid (signed), deductionCode (text), discount.
  */
-function classifyLine(row, decoder) {
+function classifyLine(row, decoder, rebillIndex = {}) {
   const hasCode = Boolean(row.deductionCode);
   const amount = Number(row.amountPaid) || 0;
+  const invoiceStr = String(row.invoice || '').trim();
+  const rebill = rebillIndex[invoiceStr];
+
+  // Money coming back on a dispute. A recovered dispute is re-invoiced to
+  // Walmart under a NEW number (the rebill "New Inv #"), and Walmart pays THAT
+  // number — so a positive line pointing at a rebill number we issued is a
+  // recovery, even when it carries no deduction code (which is how a plain
+  // invoice payment would otherwise look). Tie it back to the original invoice
+  // + code so it clears the right claim and books to Disputed AR — never
+  // treated as a payment against a QBO invoice that was never created.
+  if (amount > 0 && rebill) {
+    return {
+      kind: 'repayment',
+      code: rebill.code,
+      category: 'repayment',
+      description: rebill.description || `Recovered dispute (inv ${rebill.invoice})`,
+      originalInvoice: rebill.invoice,
+      rebillInvoice: invoiceStr,
+    };
+  }
 
   if (!hasCode && amount > 0) {
     return { kind: 'payment', code: '', category: 'payment' };
@@ -60,9 +80,10 @@ function classifyLine(row, decoder) {
   }
 
   // A positive amount on a coded line is money coming back = a repayment,
-  // regardless of the code's default category.
+  // regardless of the code's default category. The invoice on the line is the
+  // original here (no rebill match above), so tag it as such.
   if (amount > 0) {
-    return { kind: 'repayment', code, category: 'repayment', description: rule.description };
+    return { kind: 'repayment', code, category: 'repayment', description: rule.description, originalInvoice: invoiceStr };
   }
 
   return {
@@ -87,14 +108,14 @@ function classifyLine(row, decoder) {
  *     feeAccounts: { [code]: accountId, default: accountId } }
  * @param {Object} meta    { checkNumber, datePaid }
  */
-function allocateCheck(rows, decoder, accounts = {}, meta = {}) {
+function allocateCheck(rows, decoder, accounts = {}, meta = {}, rebillIndex = {}) {
   const byInvoice = new Map();
   const feeLines = [];
   const repaymentLines = [];
   const unclassified = [];
 
   for (const row of rows) {
-    const c = classifyLine(row, decoder);
+    const c = classifyLine(row, decoder, rebillIndex);
     const invoice = String(row.invoice || '').trim();
 
     if (c.category === 'unclassified') {
@@ -106,7 +127,17 @@ function allocateCheck(rows, decoder, accounts = {}, meta = {}) {
       continue;
     }
     if (c.category === 'repayment') {
-      repaymentLines.push({ invoice, code: c.code, description: c.description, amount: round2(row.amountPaid) });
+      repaymentLines.push({
+        // the ORIGINAL invoice — for tagging the Disputed AR line and matching
+        // the claim — even when the remittance referenced the rebill number
+        invoice: c.originalInvoice || invoice,
+        // the rebill number the remittance actually carried (if any), so the
+        // claim can be matched by it too
+        rebillInvoice: c.rebillInvoice,
+        code: c.code,
+        description: c.description,
+        amount: round2(row.amountPaid),
+      });
       continue;
     }
 
@@ -221,8 +252,9 @@ function allocateCheck(rows, decoder, accounts = {}, meta = {}) {
     depositLines.push({
       type: 'repaid-dispute',
       invoice: r.invoice,
+      rebillInvoice: r.rebillInvoice,
       code: r.code,
-      description: `Repaid dispute: ${r.description || r.code}`,
+      description: `Recovered dispute: ${r.description || r.code} (inv ${r.invoice})`,
       account: accounts.deductionsBucket || 'Walmart Deductions Receivable',
       amount: round2(Math.abs(r.amount)),
     });

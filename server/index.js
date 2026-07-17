@@ -161,7 +161,9 @@ function buildPlanFromSession(req) {
   }
   const decoder = store.getDecoder();
   const accounts = store.getAccounts();
-  return allocateCheck(rem.rows, decoder, accounts, { checkNumber: rem.checkNumber, datePaid: rem.datePaid });
+  // Pass the rebill index so a recovered dispute coming back under its rebill
+  // "New Inv #" is recognized as a repayment, not a payment on a phantom invoice.
+  return allocateCheck(rem.rows, decoder, accounts, { checkNumber: rem.checkNumber, datePaid: rem.datePaid }, store.getRebillIndex());
 }
 
 function recordClaimsForCheck(plan, postedAt) {
@@ -330,15 +332,28 @@ app.post(
 
 function summarizeClaims(claims) {
   const by = (s) => claims.filter((c) => c.status === s);
-  const sum = (list) => Math.round(list.reduce((a, c) => a + (Number(c.amount) || 0), 0) * 100) / 100;
+  const round = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
   const open = claims.filter((c) => !['recovered', 'denied', 'writeoff'].includes(c.status));
+  // Open dollars = what's still outstanding, net of any partial recovery.
+  const openAmount = round(
+    open.reduce((a, c) => a + Math.max(0, (Number(c.amount) || 0) - (Number(c.recoveredAmount) || 0)), 0)
+  );
+  // Recovered dollars = cash actually returned, including partials. Fall back to
+  // the claim amount for a fully-recovered claim that predates amount tracking.
+  const recoveredAmount = round(
+    claims.reduce(
+      (a, c) => a + (Number(c.recoveredAmount) || (c.status === 'recovered' ? Number(c.amount) || 0 : 0)),
+      0
+    )
+  );
   return {
     count: claims.length,
     openCount: open.length,
-    openAmount: sum(open),
-    recoveredAmount: sum(by('recovered')),
+    openAmount,
+    recoveredAmount,
     readyCount: by('ready').length,
     filedCount: by('filed').length,
+    partialCount: by('partial').length,
   };
 }
 
@@ -392,7 +407,7 @@ app.post(
 app.post(
   '/api/claims/:id',
   wrap(async (req, res) => {
-    const allowed = ['ready', 'filed', 'research', 'recovered', 'denied', 'writeoff'];
+    const allowed = ['ready', 'filed', 'research', 'partial', 'recovered', 'denied', 'writeoff'];
     const patch = {};
     if (req.body.status) {
       if (!allowed.includes(req.body.status)) throw badRequest('Unknown status.');

@@ -280,6 +280,7 @@ const CLAIM_STATUSES = [
   ['ready', 'Ready to file'],
   ['filed', 'Filed'],
   ['research', 'In research'],
+  ['partial', 'Partly recovered'],
   ['recovered', 'Recovered'],
   ['denied', 'Denied'],
   ['writeoff', 'Written off'],
@@ -310,12 +311,16 @@ async function loadClaims() {
     const rows = claims.map((c) => {
       const opts = CLAIM_STATUSES.map(([v, l]) => `<option value="${v}" ${c.status === v ? 'selected' : ''}>${l}</option>`).join('');
       const done = ['recovered', 'denied', 'writeoff'].includes(c.status);
+      const rec = Number(c.recoveredAmount) || 0;
+      const amountCell = rec > 0 && c.status !== 'recovered'
+        ? `${money(c.amount)}<div class="acct small">${money(rec)} back</div>`
+        : money(c.amount);
       return `<tr class="${done ? 'muted' : ''}">
         <td><input type="checkbox" class="clsel" data-id="${esc(c.id)}" ${c.status === 'ready' ? 'checked' : ''}></td>
         <td>${esc(c.invoice)}</td>
         <td class="acct">${esc(c.po || '—')}</td>
         <td>[${esc(c.code)}]</td>
-        <td class="num neg">${money(c.amount)}</td>
+        <td class="num neg">${amountCell}</td>
         <td class="acct">${esc(c.shipDate || '—')}</td>
         <td class="acct">${esc(c.checkNumber || '—')}</td>
         <td><select class="clstatus" data-id="${esc(c.id)}">${opts}</select></td>

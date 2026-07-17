@@ -62,6 +62,58 @@ test('unknown code comes back unclassified (never silently posted)', () => {
   assert.strictEqual(classifyLine(weird, DECODER).category, 'unclassified');
 });
 
+// --- Recovered dispute coming back under its rebill number ------------------
+
+test('a positive line on a rebill number is a repayment, tied to the original', () => {
+  const rebillIndex = { '8980000': { invoice: '46226', code: '0022', description: 'Merchandise Billed Not Shipped' } };
+  // No deduction code — Walmart just pays the re-invoice like any invoice.
+  const line = { invoice: '8980000', invoiceAmount: 9.52, discount: 0, amountPaid: 9.52, deductionCode: '' };
+  const c = classifyLine(line, DECODER, rebillIndex);
+  assert.strictEqual(c.category, 'repayment');
+  assert.strictEqual(c.originalInvoice, '46226'); // tied back to the real invoice
+  assert.strictEqual(c.rebillInvoice, '8980000');
+  assert.strictEqual(c.code, '0022');
+});
+
+test('an uncoded positive line NOT matching a rebill stays an ordinary payment', () => {
+  const line = { invoice: '46500', invoiceAmount: 100, discount: 0, amountPaid: 100, deductionCode: '' };
+  assert.strictEqual(classifyLine(line, DECODER, { '8980000': { invoice: '1', code: '0022' } }).category, 'payment');
+});
+
+test('a recovered dispute books to Disputed AR, not a phantom invoice, and balances', () => {
+  const rebillIndex = { '8980000': { invoice: '46226', code: '0022', description: 'Merchandise Billed Not Shipped' } };
+  const rows = [
+    // a normal invoice being paid this cycle
+    { po: 'P1', invoice: '46600', invoiceAmount: 500, discount: 10, amountPaid: 490, deductionCode: '' },
+    // last cycle's dispute, now recovered, arriving under the rebill number
+    { po: 'P0', invoice: '8980000', invoiceAmount: 9.52, discount: 0, amountPaid: 9.52, deductionCode: '' },
+  ];
+  const plan = allocateCheck(rows, DECODER, ACCOUNTS, { checkNumber: 'C1', datePaid: '2026-07-17' }, rebillIndex);
+
+  // The rebill line is a repayment — NOT an invoice in the Receive Payment.
+  assert.strictEqual(plan.receivePayment.invoices.length, 1);
+  assert.strictEqual(plan.receivePayment.invoices[0].invoice, '46600');
+  assert.ok(!plan.receivePayment.invoices.some((i) => i.invoice === '8980000'), 'rebill is never a payment invoice');
+
+  // It books a positive line to Disputed AR, tagged with the ORIGINAL invoice.
+  const repay = plan.bankDeposit.lines.find((l) => l.type === 'repaid-dispute');
+  assert.ok(repay, 'deposit has a recovered-dispute line');
+  assert.strictEqual(repay.amount, 9.52);
+  assert.strictEqual(repay.account, 'Disputed AR');
+  assert.strictEqual(repay.invoice, '46226');
+  assert.strictEqual(repay.rebillInvoice, '8980000');
+
+  // plan.repayments carries both numbers so the claim can be matched either way.
+  assert.strictEqual(plan.repayments.length, 1);
+  assert.strictEqual(plan.repayments[0].invoice, '46226');
+  assert.strictEqual(plan.repayments[0].rebillInvoice, '8980000');
+
+  // Still ties to the ACH: 490 (net invoice) + 9.52 (recovery) = 499.52.
+  assert.strictEqual(plan.reconciliation.remittanceNet, 499.52);
+  assert.strictEqual(plan.bankDeposit.total, 499.52);
+  assert.strictEqual(plan.reconciliation.balanced, true);
+});
+
 test('full allocation of check 004041349 ties out to the ACH', () => {
   const plan = allocateCheck(ROWS, DECODER, ACCOUNTS, { checkNumber: '004041349', datePaid: '2026-06-23' });
 
