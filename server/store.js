@@ -128,18 +128,17 @@ function saveAccounts(accounts) {
 // already been submitted for vendor 540153 gets the claim rejected or misapplied.
 // Two separate sources of collision to stay clear of:
 //
-//  1. STAT Recovery's block. Verified from their EDI 810 (transmitted
-//     2026-04-02): they used 8973800–8974007 — 137 rebills, $28,595.59, with
-//     125 issued in a single day. STAT is winding down but may still file, so
-//     starting just above their high-water mark is not enough headroom; one
-//     more normal batch would run straight through it. Hence 8980000, which
-//     leaves ~6k of clearance while staying in the 897xxxx family Walmart
-//     already accepts.
+//  1. STAT Recovery's block. Two real EDI 810 batches confirm STAT is STILL
+//     actively filing, sequentially: 8973800–8974007 (sent 2026-04-02, $28,595)
+//     then 8974008–8974211 (sent 2026-04-20, $28,974) — ~140 rebills every ~18
+//     days. So starting just above their high-water mark is not enough headroom.
+//     Hence 8980000: ~5.8k of clearance above the current mark (8974211), still
+//     in the 897xxxx family Walmart accepts, good for years at STAT's rate.
 //
 //  2. Our own already-issued rebills. Numbers handed to Walmart on a past
 //     export can never be reused, so the next number must also clear the
 //     highest one we've assigned. See minSafeNewInvoice().
-const STAT_HIGH_WATER = 8974007;
+const STAT_HIGH_WATER = 8974211;
 const DEFAULT_NEXT_NEW_INVOICE = 8980000;
 
 function getWalmartConfig() {

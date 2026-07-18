@@ -24,6 +24,8 @@ const SEED_ITEM_MASTER = {
   'MM STRAW CHOCO 4PK': { itemNumber: '554935983', unitPrice: 9.52 },
   'MM STRAW CKCRM 4PK': { itemNumber: '554935985', unitPrice: 9.52 },
   'MM STRAW STRWBRY 4PK': { itemNumber: '554935984', unitPrice: 9.52 },
+  'MM STRAWBRRY 24CT': { itemNumber: '650081364', unitPrice: 24.16 },
+  'MM UNICORN 4PK': { itemNumber: '650081361', unitPrice: 9.52 },
   'MM VARIETY 24PK': { itemNumber: '650044391', unitPrice: 24.16 },
 };
 
