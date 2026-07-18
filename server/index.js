@@ -140,7 +140,12 @@ async function buildPostDeps() {
       findInvoiceId: (doc) =>
         qbo.findInvoiceByDocNumber(doc).then((i) =>
           i
-            ? { id: i.Id, customerId: i.CustomerRef && i.CustomerRef.value, customerName: i.CustomerRef && i.CustomerRef.name }
+            ? {
+                id: i.Id,
+                customerId: i.CustomerRef && i.CustomerRef.value,
+                customerName: i.CustomerRef && i.CustomerRef.name,
+                balance: i.Balance,
+              }
             : null
         ),
       accountIdFor,
@@ -757,10 +762,22 @@ app.post(
 
     // Only for checks already in QuickBooks. An unposted check should go
     // through the normal post, which records its claims automatically —
-    // backfilling one would show disputes with nothing behind them.
-    if (!store.isAlreadyPosted(checkNumber)) {
+    // backfilling one would show disputes with nothing behind them. "Recorded"
+    // means either the app's own ledger OR (for checks posted another way) its
+    // invoices already showing paid in QuickBooks.
+    let recorded = store.isAlreadyPosted(checkNumber);
+    if (!recorded && qbo.isConnected()) {
+      try {
+        const { deps } = await buildPostDeps();
+        const review = await postPlan(plan, deps, { dryRun: true, today: plan.meta.datePaid });
+        recorded = Boolean(review.alreadyInQuickBooks);
+      } catch (_) {
+        /* fall back to the ledger check below */
+      }
+    }
+    if (!recorded) {
       throw badRequest(
-        `Check ${checkNumber} hasn't been posted yet, so there's nothing to backfill. ` +
+        `Check ${checkNumber} isn't recorded in QuickBooks yet, so there's nothing to backfill. ` +
           `Post it normally and its disputes are recorded automatically.`
       );
     }

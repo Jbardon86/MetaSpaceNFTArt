@@ -104,7 +104,10 @@ function render(data) {
   }
 
   // header + reconciliation
-  const posted = data.alreadyPosted ? ' <span class="pill dup">already posted</span>' : '';
+  const posted =
+    data.alreadyPosted ? ' <span class="pill dup">already posted</span>'
+    : data.review && data.review.alreadyInQuickBooks ? ' <span class="pill dup">already in QuickBooks</span>'
+    : '';
   $('reviewHeader').innerHTML =
     `<h1>Check ${esc(data.checkNumber || '—')}</h1>` +
     `<p class="sub">Paid ${esc(fmtDate(data.datePaid))} · ${plan.receivePayment.invoices.length} invoices${posted}</p>`;
@@ -147,9 +150,13 @@ function render(data) {
   }
   rw.innerHTML = notes;
 
-  // A check posted before the Disputes tab existed has its disputes sitting in
-  // Disputed AR untracked. Offer to record them — this posts nothing.
-  const canBackfill = data.alreadyPosted && unclassified.length === 0 && (plan.disputes || []).length > 0;
+  // A check is "already recorded" if the app posted it (its ledger) OR its
+  // invoices already show paid in QuickBooks (posted another way). Either way,
+  // posting again would double-book — so block Post and offer to just record
+  // its disputes instead (that posts nothing).
+  const alreadyInQBO = !!(data.review && data.review.alreadyInQuickBooks);
+  const alreadyRecorded = data.alreadyPosted || alreadyInQBO;
+  const canBackfill = alreadyRecorded && unclassified.length === 0 && (plan.disputes || []).length > 0;
   $('backfillBtn').classList.toggle('hidden', !canBackfill);
   if (canBackfill) {
     const n = plan.disputes.length;
@@ -157,12 +164,13 @@ function render(data) {
   }
 
   // buttons
-  const canPost = state.connected && unclassified.length === 0 && r.balanced && !data.alreadyPosted;
+  const canPost = state.connected && unclassified.length === 0 && r.balanced && !alreadyRecorded;
   $('postBtn').disabled = !canPost;
   $('postHint').textContent = !state.connected ? 'Connect QuickBooks first'
     : unclassified.length ? 'Classify the new codes first'
     : !r.balanced ? 'Does not balance — not safe to post'
-    : canBackfill ? 'Already posted — you can still track its disputes (nothing is posted)'
+    : canBackfill ? 'Already in QuickBooks — you can still track its disputes (nothing is posted)'
+    : alreadyInQBO && !data.alreadyPosted ? 'Already in QuickBooks — posting would double-book it'
     : data.alreadyPosted ? 'This check was already posted'
     : 'Posts a Receive Payment + Bank Deposit';
 

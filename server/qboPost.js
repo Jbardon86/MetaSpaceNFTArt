@@ -170,7 +170,28 @@ async function postPlan(plan, deps, opts = {}) {
       invoiceDoc: inv.invoice,
       cash: round2(inv.appliedToUndepositedFunds),
       writeOff: round2(inv.writeOff),
+      balance: typeof found === 'object' ? found.balance : undefined,
     });
+  }
+
+  // Double-book guard: if every invoice this check would pay is ALREADY paid in
+  // QuickBooks (balance 0), the check was almost certainly already recorded —
+  // by the app or by hand. The app's own ledger only catches app-posted checks,
+  // so this catches the ones posted another way. Refuse a real post; the
+  // dry-run just flags it so the reviewer sees it before trying.
+  const withBalance = resolvedInvoices.filter((i) => i.balance != null);
+  const alreadyPaid = withBalance.filter((i) => Number(i.balance) === 0);
+  report.alreadyInQuickBooks = withBalance.length > 0 && alreadyPaid.length === withBalance.length;
+  if (report.alreadyInQuickBooks) {
+    const msg =
+      `Every invoice on check ${checkNumber} is already paid in QuickBooks — it looks already recorded. ` +
+      `Posting again would double-book it.`;
+    if (!dryRun) {
+      const e = new Error(msg + ' Use "Record disputes" if you only need its disputes tracked.');
+      e.status = 409;
+      throw e;
+    }
+    report.warnings.unshift(msg);
   }
 
   // The payment must be applied as the invoices' own customer. Only fall back

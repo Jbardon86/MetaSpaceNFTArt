@@ -97,6 +97,40 @@ test('postPlan applies the payment as the invoices own customer', async () => {
   assert.strictEqual(adjLine.DepositLineDetail.Entity.type, 'Customer');
 });
 
+test('postPlan flags an already-paid check on dry-run and refuses to double-post it', async () => {
+  const accountIds = { 'Undeposited Funds': '90', 'American National': '35', 'Disputed AR': '80', 'Merchant Deposit Fees': '81' };
+  // Both invoices already show paid (balance 0) → the check is already recorded.
+  const paidDeps = {
+    findCustomerId: async () => '7',
+    findInvoiceId: async (doc) =>
+      ({ '46364': { id: '101', customerId: '42', balance: 0 },
+         '46367': { id: '102', customerId: '42', balance: 0 } }[doc] || null),
+    accountIdFor: (label) => accountIds[label] || null,
+    createPayment: async () => { throw new Error('should never be called'); },
+    createDeposit: async () => { throw new Error('should never be called'); },
+  };
+
+  // Dry-run: flags it, doesn't throw.
+  const review = await postPlan(plan(), paidDeps, { dryRun: true });
+  assert.strictEqual(review.alreadyInQuickBooks, true);
+  assert.ok(review.warnings.some((w) => /already paid in QuickBooks/i.test(w)));
+
+  // Real post: refuses (would double-book).
+  await assert.rejects(() => postPlan(plan(), paidDeps, { dryRun: false }), /already recorded|double-book/i);
+});
+
+test('postPlan does NOT flag an open (unpaid) check', async () => {
+  const openDeps = {
+    findCustomerId: async () => '7',
+    findInvoiceId: async (doc) =>
+      ({ '46364': { id: '101', customerId: '42', balance: 756.04 },
+         '46367': { id: '102', customerId: '42', balance: 785.03 } }[doc] || null),
+    accountIdFor: (label) => ({ 'Undeposited Funds': '90', 'American National': '35', 'Disputed AR': '80', 'Merchant Deposit Fees': '81' }[label] || null),
+  };
+  const review = await postPlan(plan(), openDeps, { dryRun: true });
+  assert.ok(!review.alreadyInQuickBooks);
+});
+
 test('postPlan flags a missing invoice instead of failing', async () => {
   const deps = {
     findCustomerId: async () => '7',
