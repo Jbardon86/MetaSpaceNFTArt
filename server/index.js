@@ -12,6 +12,7 @@ const store = require('./store');
 const { parseRemittance } = require('./walmartFile');
 const { allocateCheck } = require('./allocator');
 const { postPlan } = require('./qboPost');
+const edi810 = require('./edi810');
 const { seedSandbox } = require('./seedSandbox');
 
 const app = express();
@@ -426,6 +427,66 @@ app.post(
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="Recovery_Submission_${cfg.vendorNumber}.xlsx"`);
     res.send(Buffer.from(buf));
+  })
+);
+
+// Generate the EDI 810 re-invoice — the actual submission artifact — for the
+// documented, already-numbered claims. Must be declared before '/api/claims/:id'.
+app.post(
+  '/api/claims/edi810',
+  wrap(async (req, res) => {
+    const all = store.getClaims();
+    const ids = req.body && Array.isArray(req.body.ids) ? new Set(req.body.ids) : null;
+    const selected = all.claims.filter((c) =>
+      ids ? ids.has(c.id) : !['recovered', 'denied', 'writeoff'].includes(c.status)
+    );
+
+    // Only submit documented claims (same failsafe as filing).
+    const ready = selected.filter((c) => store.claimDocsStatus(c).complete);
+    if (!ready.length) throw badRequest('No documented claims to submit. Add each claim\'s proof of delivery first.');
+
+    // The 810 re-invoices under the rebill "New Inv #". A claim only has one
+    // after the Recovery Submission export, so require that first.
+    const unnumbered = ready.filter((c) => !c.newInvoice);
+    if (unnumbered.length) {
+      throw badRequest(
+        `These claims need a rebill number first — run "Export Recovery Submission" to assign one: ` +
+          unnumbered.map((c) => `inv ${c.invoice}`).join(', ') + '.'
+      );
+    }
+
+    // Enrich each claim with its QBO invoice line items + location UPC (best
+    // effort — the generator falls back to a summary line if QBO is offline).
+    const today = new Date().toISOString().slice(0, 10);
+    const items = [];
+    for (const c of ready) {
+      let invoiceLines = [];
+      let locationUpc = '';
+      let poDate = '';
+      if (qbo.isConnected()) {
+        try {
+          const inv = await qbo.getInvoiceForEdi(c.invoice);
+          if (inv) {
+            invoiceLines = inv.lines;
+            locationUpc = edi810.upcFromMemo(inv.privateNote);
+            poDate = inv.txnDate;
+          }
+        } catch (_) {
+          /* best effort — fall back to a summary line */
+        }
+      }
+      items.push({ claim: c, invoiceLines, locationUpc, invoiceDate: today, poDate });
+    }
+
+    const cfg = store.getWalmartConfig();
+    const control = String(Date.now()).slice(-9);
+    const { edi, warnings } = edi810.buildEdi810(items, { control, now: new Date().toISOString() });
+
+    // URI-encode so any non-ASCII in a warning can't produce an invalid header.
+    if (warnings.length) res.setHeader('X-Edi-Warnings', encodeURIComponent(JSON.stringify(warnings)));
+    res.setHeader('Content-Type', 'application/edi-x12');
+    res.setHeader('Content-Disposition', `attachment; filename="Walmart_810_${cfg.vendorNumber}.edi"`);
+    res.send(edi);
   })
 );
 

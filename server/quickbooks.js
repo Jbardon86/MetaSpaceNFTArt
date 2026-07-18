@@ -222,6 +222,27 @@ async function findInvoiceByDocNumber(docNumber) {
 }
 
 /**
+ * Fetch an invoice's line items + memo, for building the EDI 810 re-invoice.
+ * Returns { lines: [{description, quantity, unitPrice}], privateNote, txnDate }
+ * or null. Discount / non-item lines (no unit price) are dropped.
+ */
+async function getInvoiceForEdi(docNumber) {
+  const safe = String(docNumber).replace(/'/g, "\\'");
+  const qr = await query(`SELECT * FROM Invoice WHERE DocNumber = '${safe}' MAXRESULTS 1`);
+  const inv = qr.Invoice && qr.Invoice[0];
+  if (!inv) return null;
+  const lines = (inv.Line || [])
+    .filter((l) => l.DetailType === 'SalesItemLineDetail' && l.SalesItemLineDetail)
+    .map((l) => ({
+      description: l.Description || (l.SalesItemLineDetail.ItemRef && l.SalesItemLineDetail.ItemRef.name) || '',
+      quantity: Number(l.SalesItemLineDetail.Qty) || 0,
+      unitPrice: Number(l.SalesItemLineDetail.UnitPrice) || 0,
+    }))
+    .filter((l) => l.unitPrice > 0);
+  return { lines, privateNote: inv.PrivateNote || '', txnDate: inv.TxnDate || '' };
+}
+
+/**
  * Fetch an invoice as a PDF (the actual document, for a dispute packet). QBO
  * serves it from a dedicated endpoint that returns application/pdf rather than
  * JSON, so this doesn't go through apiRequest. Returns a Buffer.
@@ -350,6 +371,7 @@ module.exports = {
   createCustomer,
   ensureCustomer,
   findInvoiceByDocNumber,
+  getInvoiceForEdi,
   getInvoicePdf,
   buildAccountResolver,
   ensureWriteOffItem,

@@ -368,7 +368,7 @@ async function loadClaims() {
 async function exportClaims() {
   const ids = Array.from(document.querySelectorAll('.clsel')).filter((c) => c.checked).map((c) => c.dataset.id);
   try {
-    const res = await fetch('/api/claims/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) });
+    const res = await fetch('/api/claims/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ids.length ? { ids } : {}) });
     if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Export failed'); }
     // Claims held back for missing documents (the export files only documented ones).
     let skipped = [];
@@ -530,6 +530,28 @@ async function removePod(id) {
   } catch (err) { toast(err.message, true); }
 }
 
+async function generateEdi810() {
+  const ids = Array.from(document.querySelectorAll('.clsel')).filter((c) => c.checked).map((c) => c.dataset.id);
+  try {
+    const res = await fetch('/api/claims/edi810', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ids.length ? { ids } : {}) });
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'EDI generation failed'); }
+    let warnings = [];
+    try { const h = res.headers.get('X-Edi-Warnings'); if (h) warnings = JSON.parse(decodeURIComponent(h)); } catch (_) { /* none */ }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'Walmart_810.edi'; a.click();
+    URL.revokeObjectURL(url);
+    if (warnings.length) {
+      toast(`EDI 810 generated — but ${warnings.length} claim(s) need the SKU confirmed before sending. Check the file.`, true);
+    } else {
+      toast('EDI 810 generated. Send it through your EDI provider (TrueCommerce).');
+    }
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
 function showHistory() {
   setNav('history');
   document.querySelectorAll('main > .step').forEach((s) => s.classList.add('hidden'));
@@ -584,6 +606,7 @@ $('navDisputes').addEventListener('click', showDisputes);
 $('navHistory').addEventListener('click', showHistory);
 $('navSettings').addEventListener('click', showSettings);
 $('exportClaimsBtn').addEventListener('click', exportClaims);
+$('edi810Btn').addEventListener('click', generateEdi810);
 $('connectBtn').addEventListener('click', () => (window.location.href = '/auth/connect'));
 $('disconnectBtn').addEventListener('click', async () => { await api('/api/disconnect', { method: 'POST' }); refreshStatus(); });
 $('dryRunBtn').addEventListener('click', () => doPost(true));
