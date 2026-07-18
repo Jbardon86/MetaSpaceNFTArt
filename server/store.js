@@ -338,6 +338,23 @@ function matchRepayments(repayments, checkNumber) {
   return matched;
 }
 
+// --- Item master (SKU -> Walmart Buyer's Item Number) ----------------------
+// Learned over time as SKUs get disputed, so the EDI 810 can carry the precise
+// item number. Seeded in edi810.js from STAT's real file; this holds additions.
+
+function getItemMaster() {
+  return readJson('itemMaster.json', {}) || {};
+}
+
+function upsertItemMaster(description, entry) {
+  const saved = getItemMaster();
+  const key = String(description || '').trim();
+  if (!key) return saved;
+  saved[key] = { ...(saved[key] || {}), ...entry };
+  writeJson('itemMaster.json', saved);
+  return saved;
+}
+
 // --- Posted-check ledger (duplicate guard) ---------------------------------
 
 function getLedger() {
@@ -389,6 +406,8 @@ module.exports = {
   addClaims,
   updateClaim,
   matchRepayments,
+  getItemMaster,
+  upsertItemMaster,
   getLedger,
   recordPosted,
   isAlreadyPosted,

@@ -480,7 +480,11 @@ app.post(
 
     const cfg = store.getWalmartConfig();
     const control = String(Date.now()).slice(-9);
-    const { edi, warnings } = edi810.buildEdi810(items, { control, now: new Date().toISOString() });
+    const { edi, warnings } = edi810.buildEdi810(items, {
+      control,
+      now: new Date().toISOString(),
+      itemMaster: store.getItemMaster(),
+    });
 
     // URI-encode so any non-ASCII in a warning can't produce an invalid header.
     if (warnings.length) res.setHeader('X-Edi-Warnings', encodeURIComponent(JSON.stringify(warnings)));
@@ -497,6 +501,71 @@ function findClaimOr404(id) {
   if (!claim) throw badRequest('Claim not found.');
   return claim;
 }
+
+function round2(n) {
+  return Math.round(((Number(n) || 0) + Number.EPSILON) * 100) / 100;
+}
+
+// The candidate SKUs for a claim's dispute — the real line items on its QBO
+// invoice, each with its resolved Walmart item number — so the shorted item can
+// be picked precisely rather than guessed.
+app.get(
+  '/api/claims/:id/candidates',
+  wrap(async (req, res) => {
+    const claim = findClaimOr404(req.params.id);
+    let lines = [];
+    let connected = qbo.isConnected();
+    if (connected) {
+      try {
+        const inv = await qbo.getInvoiceForEdi(claim.invoice);
+        if (inv) lines = inv.lines;
+      } catch (_) {
+        /* best effort */
+      }
+    }
+    const master = store.getItemMaster();
+    const candidates = lines.map((l) => ({
+      description: l.description,
+      unitPrice: round2(l.unitPrice),
+      invoiceQty: l.quantity,
+      itemNumber: edi810.itemNumberFor(l.description, master),
+    }));
+    res.json({ amount: round2(claim.amount), items: claim.items || [], candidates, connected });
+  })
+);
+
+// Set the precise shorted SKUs for a claim. They MUST sum to the exact deduction
+// — a re-invoice that doesn't tie to what Walmart took isn't submittable. Any
+// item numbers entered here are learned into the master for next time.
+app.post(
+  '/api/claims/:id/items',
+  wrap(async (req, res) => {
+    const claim = findClaimOr404(req.params.id);
+    const clean = (Array.isArray(req.body.items) ? req.body.items : [])
+      .map((i) => ({
+        description: String(i.description || '').trim(),
+        quantity: Number(i.quantity) || 0,
+        unitPrice: round2(i.unitPrice),
+        itemNumber: String(i.itemNumber || '').trim(),
+      }))
+      .filter((i) => i.description && i.quantity > 0 && i.unitPrice > 0);
+    if (!clean.length) throw badRequest('Add at least one shorted item with a quantity.');
+
+    const total = round2(clean.reduce((s, i) => s + i.quantity * i.unitPrice, 0));
+    if (Math.abs(total - round2(claim.amount)) > 0.005) {
+      throw badRequest(
+        `The items add up to $${total.toFixed(2)}, but Walmart deducted $${round2(claim.amount).toFixed(2)}. ` +
+          `They have to match exactly before this can be submitted.`
+      );
+    }
+
+    for (const i of clean) {
+      if (i.itemNumber) store.upsertItemMaster(i.description, { itemNumber: i.itemNumber, unitPrice: i.unitPrice });
+    }
+    const updated = store.updateClaim(claim.id, { items: clean });
+    res.json({ ok: true, claim: { ...updated, docsStatus: store.claimDocsStatus(updated) } });
+  })
+);
 
 // The invoice document, pulled live from QuickBooks (we posted against it, so it
 // exists there). No upload needed — this is the "QBO invoice pull" half.

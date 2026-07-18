@@ -86,6 +86,26 @@ test('claimDocsStatus needs the proof of delivery (invoice comes from QBO)', () 
   assert.strictEqual(store.claimDocsStatus({ docs: { pod: { have: true } } }).complete, true);
 });
 
+test('item master learns and merges Walmart item numbers', () => {
+  store.upsertItemMaster('MM STRAWBRRY 24CT', { itemNumber: '650044999', unitPrice: 24.16 });
+  const m = store.getItemMaster();
+  assert.strictEqual(m['MM STRAWBRRY 24CT'].itemNumber, '650044999');
+  // upsert merges rather than clobbering
+  store.upsertItemMaster('MM STRAWBRRY 24CT', { unitPrice: 24.16 });
+  assert.strictEqual(store.getItemMaster()['MM STRAWBRRY 24CT'].itemNumber, '650044999');
+});
+
+test('a learned item number flows into a precise EDI 810 line', () => {
+  const { buildEdi810 } = require('../server/edi810');
+  const claim = {
+    id: 'p-1', invoice: '46226', code: '0022', amount: 24.16, po: 'P', shipDate: '2026-06-01', newInvoice: '8980050',
+    items: [{ description: 'MM STRAWBRRY 24CT', quantity: 1, unitPrice: 24.16 }],
+  };
+  const { edi } = buildEdi810([{ claim, invoiceLines: [] }], { control: '1', now: '2026-07-17T00:00:00.000Z', itemMaster: store.getItemMaster() });
+  assert.ok(edi.includes('IN*650044999'), 'uses the learned Walmart item number');
+  assert.ok(edi.includes('TDS*2416'));
+});
+
 test('saveClaimDoc/readClaimDoc round-trips an uploaded file', () => {
   const file = { originalname: 'signed_bol.pdf', mimetype: 'application/pdf', size: 5, buffer: Buffer.from('hello') };
   const meta = store.saveClaimDoc('970-46226-0022', 'pod', file);

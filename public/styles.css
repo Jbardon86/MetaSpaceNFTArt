@@ -200,6 +200,21 @@ tr.total td.num { font-size: 15px; }
 .btn.tiny { padding: 3px 9px; font-size: 12px; border-radius: 8px; }
 .pod-linkinput { font-size: 12px; padding: 4px 7px; border-radius: 8px; min-width: 160px;
   background: var(--surface); color: var(--text); border: 0.5px solid var(--hairline-strong); }
+
+/* ---- Shorted-SKU editor (precise EDI 810 lines) ---- */
+.itemseditor td { background: var(--surface-2); }
+.itemsed { padding: 14px 16px; }
+.itemsed-head { font-size: 13px; color: var(--text-2); margin-bottom: 12px; }
+.ited-head, .ited-row { display: grid; grid-template-columns: 90px minmax(160px, 1fr) 80px 140px; gap: 12px; align-items: center; }
+.ited-head { font-family: var(--mono); font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); padding-bottom: 4px; }
+.ited-row { padding: 4px 0; font-size: 13px; }
+.ited-row input[type="number"] { width: 72px; }
+.ited-row input[type="text"] { width: 100%; box-sizing: border-box; }
+.itemsed-foot { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.itemsed-total { font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; margin-right: auto; }
+.itemsed-total .tie-ok { color: var(--good); }
+.itemsed-total .tie-off { color: var(--critical); }
+.warnnote { color: var(--warn); }
 .pill.ok { background: var(--good-bg); color: var(--good); }
 .pill.dup { background: var(--accent-bg); color: var(--accent); }
 .pill.skip { background: var(--chip); color: var(--text-2); }

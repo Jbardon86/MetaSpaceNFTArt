@@ -333,6 +333,11 @@ async function loadClaims() {
              <div class="docline"><span class="doclabel">BOL</span> ${podControls}</div>
              <div class="docline podlink hidden"><input type="url" class="pod-linkinput" placeholder="paste BOL/POD link"><button class="btn tiny" data-act="save-podlink" data-id="${id}">Save</button></div>
              <div class="docline"><span class="doclabel">Invoice</span> <a href="/api/claims/${idEnc}/invoice-pdf" target="_blank" rel="noopener">from QuickBooks</a></div>
+             <div class="docline"><span class="doclabel">Items</span> ${
+               c.items && c.items.length
+                 ? `<span class="pill ok">${c.items.length} SKU${c.items.length > 1 ? 's' : ''}</span> <button class="linkbtn" data-act="edit-items" data-id="${id}">edit</button>`
+                 : `<button class="btn tiny" data-act="set-items" data-id="${id}">Set shorted SKU</button>`
+             }</div>
            </div>`;
       return `<tr class="${done ? 'muted' : ''}">
         <td><input type="checkbox" class="clsel" data-id="${esc(c.id)}" ${c.status === 'ready' && ds.complete ? 'checked' : ''}></td>
@@ -487,6 +492,7 @@ async function saveSettings() {
 // --- claim documents (proof of delivery) -----------------------------------
 
 function onDocAction(act, id, el) {
+  if (act === 'set-items' || act === 'edit-items') return openItemsEditor(id, el.closest('tr'));
   const docs = el.closest('.docs');
   if (act === 'upload-pod') {
     docs.querySelector('.pod-file').click();
@@ -528,6 +534,87 @@ async function removePod(id) {
     if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Remove failed'); }
     loadClaims();
   } catch (err) { toast(err.message, true); }
+}
+
+// --- shorted-SKU editor (precise EDI 810 line items) -----------------------
+
+const normKey = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+function candidateRow(c, qty) {
+  return `<div class="ited-row">
+    <input type="number" class="it-qty" min="0" step="1" value="${qty || 0}" data-price="${c.unitPrice}" data-desc="${esc(c.description)}" data-num="${esc(c.itemNumber || '')}">
+    <span>${esc(c.description)}</span>
+    <span class="num">${money(c.unitPrice)}</span>
+    <span>${c.itemNumber ? esc(c.itemNumber) : '<input type="text" class="it-num" placeholder="item #">'}</span>
+  </div>`;
+}
+function manualItemRow() {
+  return `<div class="ited-row">
+    <input type="number" class="it-qty" min="0" step="1" value="0">
+    <input type="text" class="it-desc" placeholder="other SKU">
+    <input type="number" class="it-price" step="0.01" placeholder="0.00">
+    <input type="text" class="it-num" placeholder="item #">
+  </div>`;
+}
+function collectItems(editor) {
+  const items = [];
+  editor.querySelectorAll('.ited-row').forEach((tr) => {
+    const qtyEl = tr.querySelector('.it-qty');
+    if (!qtyEl) return;
+    const qty = Number(qtyEl.value) || 0;
+    if (qty <= 0) return;
+    const descEl = tr.querySelector('.it-desc');
+    const priceEl = tr.querySelector('.it-price');
+    const numEl = tr.querySelector('.it-num');
+    const description = descEl ? descEl.value.trim() : qtyEl.dataset.desc;
+    const unitPrice = priceEl ? Number(priceEl.value) || 0 : Number(qtyEl.dataset.price) || 0;
+    const itemNumber = numEl ? numEl.value.trim() : qtyEl.dataset.num || '';
+    if (description && unitPrice > 0) items.push({ description, quantity: qty, unitPrice, itemNumber });
+  });
+  return items;
+}
+function updateItemsTotal(editor, amount) {
+  const total = Math.round(collectItems(editor).reduce((s, i) => s + i.quantity * i.unitPrice, 0) * 100) / 100;
+  const ties = Math.abs(total - amount) < 0.005;
+  editor.querySelector('.itemsed-total').innerHTML =
+    `Total: <b class="${ties ? 'tie-ok' : 'tie-off'}">${money(total)}</b> / ${money(amount)}${ties ? ' ✓' : ''}`;
+  editor.querySelector('[data-act="save-items"]').disabled = !ties;
+}
+async function openItemsEditor(id, rowEl) {
+  const next = rowEl.nextElementSibling;
+  if (next && next.classList.contains('itemseditor')) return next.remove(); // toggle
+  let data;
+  try { data = await api(`/api/claims/${encodeURIComponent(id)}/candidates`); }
+  catch (err) { return toast(err.message, true); }
+  const amount = data.amount;
+  const prefill = {};
+  (data.items || []).forEach((it) => { prefill[normKey(it.description)] = it.quantity; });
+  const rows = (data.candidates || []).map((c) => candidateRow(c, prefill[normKey(c.description)] || 0)).join('');
+  const note = data.connected
+    ? "Tick the quantity shorted for each SKU. They must total exactly what Walmart deducted."
+    : "Connect QuickBooks to load this invoice's SKUs, or enter the shorted item manually.";
+  // insertAdjacentHTML (not tr.innerHTML) so the nested table parses in proper
+  // table context — setting innerHTML on a bare <tr> mangles it.
+  rowEl.insertAdjacentHTML('afterend', `<tr class="itemseditor"><td colspan="9"><div class="itemsed">
+    <div class="itemsed-head">${note} Target: <b>${money(amount)}</b>.</div>
+    <div class="ited-head"><span>Shorted qty</span><span>SKU</span><span class="num">Unit</span><span>Walmart item #</span></div>
+    ${rows}${manualItemRow()}
+    <div class="itemsed-foot"><span class="itemsed-total"></span>
+      <button class="btn tiny" data-act="save-items" disabled>Save</button>
+      <button class="btn tiny ghost" data-act="cancel-items">Cancel</button></div>
+  </div></td></tr>`);
+  const tr = rowEl.nextElementSibling;
+  const editor = tr.querySelector('.itemsed');
+  editor.addEventListener('input', () => updateItemsTotal(editor, amount));
+  editor.querySelector('[data-act="save-items"]').addEventListener('click', async () => {
+    try {
+      await api(`/api/claims/${encodeURIComponent(id)}/items`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: collectItems(editor) }) });
+      toast('Shorted SKUs saved — this claim will re-invoice precisely.');
+      loadClaims();
+    } catch (err) { toast(err.message, true); }
+  });
+  editor.querySelector('[data-act="cancel-items"]').addEventListener('click', () => tr.remove());
+  updateItemsTotal(editor, amount);
 }
 
 async function generateEdi810() {

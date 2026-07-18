@@ -68,6 +68,12 @@ function lookupItem(description, master) {
   return null;
 }
 
+/** The Walmart Buyer's Item Number for a description, or '' if unknown. */
+function itemNumberFor(description, master) {
+  const found = lookupItem(description, { ...SEED_ITEM_MASTER, ...(master || {}) });
+  return found ? found.itemNumber : '';
+}
+
 /**
  * Decide the line items to re-invoice for a claim. Priority:
  *   1. explicit claim.items (user-confirmed shorted SKUs)
@@ -201,6 +207,7 @@ module.exports = {
   buildEdi810,
   buildTransaction,
   resolveLineItems,
+  itemNumberFor,
   upcFromMemo,
   SEED_ITEM_MASTER,
   EDI_DEFAULTS,
