@@ -118,6 +118,17 @@ test('saveClaimDoc/readClaimDoc round-trips an uploaded file', () => {
   assert.strictEqual(store.readClaimDoc('970-46226-0022', meta.storedName), null);
 });
 
+test('a recovery matches despite zero-padded invoice numbers (real Retail Link format)', () => {
+  // From real check 003896394: recoveries come back positive, coded 0022, under
+  // the original invoice number — but Retail Link pads it to "000000000045342".
+  store.addClaims([{ checkNumber: '941', invoice: '45342', code: '0022', amount: 141.03 }]);
+  const matched = store.matchRepayments([{ invoice: '000000000045342', code: '0022', amount: 141.03 }], '003896394');
+  assert.strictEqual(matched.length, 1);
+  const claim = store.getClaims().claims.find((c) => c.id === '941-45342-0022');
+  assert.strictEqual(claim.status, 'recovered');
+  assert.strictEqual(claim.recoveredAmount, 141.03);
+});
+
 test('an already fully-recovered claim is not matched again', () => {
   store.addClaims([{ checkNumber: '933', invoice: '46500', code: '0022', amount: 10 }]);
   store.updateClaim('933-46500-0022', { newInvoice: '8980800' });

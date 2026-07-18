@@ -13,6 +13,13 @@ function round2(n) {
   return Math.round(((Number(n) || 0) + Number.EPSILON) * 100) / 100;
 }
 
+// Canonical invoice number for comparison: strip zero-padding on all-digit
+// numbers so "000000000045342" and "45342" are the same invoice.
+function normInv(v) {
+  const s = String(v == null ? '' : v).trim();
+  return /^\d+$/.test(s) ? s.replace(/^0+/, '') || '0' : s;
+}
+
 // Where persisted files live. Override with DATA_DIR when hosted so it points
 // at a persistent disk (Render, etc.) that survives restarts/redeploys.
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
@@ -322,9 +329,9 @@ function matchRepayments(repayments, checkNumber) {
     const claim = data.claims.find((c) => {
       if (c.status === 'recovered') return false; // already fully recovered
       const byRebill =
-        c.newInvoice && (String(c.newInvoice) === rRebill || String(c.newInvoice) === rInv);
+        c.newInvoice && (normInv(c.newInvoice) === normInv(rRebill) || normInv(c.newInvoice) === normInv(rInv));
       const byOriginal =
-        String(c.invoice) === rInv && rInv !== '' && (!r.code || String(c.code) === String(r.code));
+        normInv(c.invoice) === normInv(rInv) && rInv !== '' && (!r.code || String(c.code) === String(r.code));
       return byRebill || byOriginal;
     });
     if (!claim) continue;

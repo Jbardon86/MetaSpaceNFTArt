@@ -101,7 +101,7 @@ function rowsFromMatrix(matrix, headerRowIndex, colMap) {
 
     rows.push({
       po: str(cell('po')),
-      invoice: str(invoice),
+      invoice: normInvoice(invoice),
       dc: str(cell('dc')),
       store: str(cell('store')),
       division: str(cell('division')),
@@ -119,6 +119,15 @@ function rowsFromMatrix(matrix, headerRowIndex, colMap) {
 
 function str(v) {
   return v == null ? '' : String(v).trim();
+}
+
+// Invoice numbers arrive zero-padded from Retail Link ("000000000045342") but
+// clean from other exports ("45342") and in QuickBooks ("45342"). Canonicalize
+// to the unpadded form so the QBO invoice lookup and — critically — recovery
+// matching (a repayment referencing the original invoice) always line up.
+function normInvoice(v) {
+  const s = str(v);
+  return /^\d+$/.test(s) ? s.replace(/^0+/, '') || '0' : s;
 }
 
 /**
