@@ -344,6 +344,110 @@ function matchRepayments(repayments, checkNumber) {
   return matched;
 }
 
+// --- Walmart dispute status history (APDP import) --------------------------
+//
+// Append-only. One entry per Walmart dispute LINE (DisputeNbr) per observed
+// status change — never overwritten, so the full adjudication trail survives
+// and the denial-follow-up work has something to read.
+//
+// A claim's "current status" is DERIVED from the newest entries for its lines
+// (see apdpImport.rollUp), not stored. Note this is kept separate from
+// `claim.status`, which tracks OUR filing pipeline (ready/filed/recovered/...)
+// and still drives the export, EDI 810 and rebill numbering. Walmart saying
+// "Denied" about STAT's filing must not silently retire a claim we intend to
+// file ourselves, so the two are reported side by side rather than merged.
+
+function getStatusHistory() {
+  return readJson('claimStatusHistory.json', { entries: [] });
+}
+
+/**
+ * Append status entries. Idempotent per (disputeNbr, status): an entry whose
+ * status already matches the newest recorded one for that dispute line is
+ * skipped, so re-uploading the same or an overlapping export is safe.
+ * Returns { appended, skipped }.
+ */
+function appendStatusHistory(entries) {
+  if (!entries || !entries.length) return { appended: 0, skipped: 0 };
+  const data = getStatusHistory();
+
+  const latest = new Map();
+  for (const e of data.entries) {
+    const prev = latest.get(e.disputeNbr);
+    if (!prev || String(e.importedAt) >= String(prev.importedAt)) latest.set(e.disputeNbr, e);
+  }
+
+  let appended = 0;
+  let skipped = 0;
+  for (const e of entries) {
+    const prev = latest.get(e.disputeNbr);
+    if (prev && prev.status === e.status) {
+      skipped += 1;
+      continue;
+    }
+    const entry = { id: `${e.disputeNbr}-${data.entries.length + appended}`, ...e };
+    data.entries.push(entry);
+    latest.set(e.disputeNbr, entry);
+    appended += 1;
+  }
+
+  if (appended) writeJson('claimStatusHistory.json', data);
+  return { appended, skipped };
+}
+
+/** Every history entry for a claim, oldest first. */
+function statusHistoryForClaim(claimId) {
+  return getStatusHistory().entries.filter((e) => e.claimId === claimId);
+}
+
+/** History entries grouped by claim id. */
+function statusHistoryByClaim() {
+  const byClaim = new Map();
+  for (const e of getStatusHistory().entries) {
+    if (!byClaim.has(e.claimId)) byClaim.set(e.claimId, []);
+    byClaim.get(e.claimId).push(e);
+  }
+  return byClaim;
+}
+
+/**
+ * Record Walmart's own identifiers on the claims an import matched, so future
+ * imports can match by DisputeNbr directly instead of re-deriving from the
+ * invoice number. Additive — never clobbers what's already there.
+ */
+function recordWalmartIds(pairs) {
+  const data = getClaims();
+  const byId = new Map(data.claims.map((c) => [c.id, c]));
+  let touched = 0;
+  for (const { claimId: id, disputeNbr, caseNbr } of pairs) {
+    const claim = byId.get(id);
+    if (!claim) continue;
+    const disputes = new Set(claim.apdpDisputeNbrs || []);
+    const cases = new Set(claim.apdpCaseNbrs || []);
+    const before = disputes.size + cases.size;
+    if (disputeNbr) disputes.add(String(disputeNbr));
+    if (caseNbr) cases.add(String(caseNbr));
+    if (disputes.size + cases.size === before) continue;
+    claim.apdpDisputeNbrs = [...disputes];
+    claim.apdpCaseNbrs = [...cases];
+    touched += 1;
+  }
+  if (touched) saveClaims(data);
+  return touched;
+}
+
+/** Ledger of APDP imports, so a batch can be traced back to its file. */
+function getImportBatches() {
+  return readJson('apdpBatches.json', { batches: [] });
+}
+
+function recordImportBatch(batch) {
+  const data = getImportBatches();
+  data.batches.push(batch);
+  writeJson('apdpBatches.json', data);
+  return data;
+}
+
 // --- Item master (SKU -> Walmart Buyer's Item Number) ----------------------
 // Learned over time as SKUs get disputed, so the EDI 810 can carry the precise
 // item number. Seeded in edi810.js from STAT's real file; this holds additions.
@@ -412,6 +516,13 @@ module.exports = {
   addClaims,
   updateClaim,
   matchRepayments,
+  getStatusHistory,
+  appendStatusHistory,
+  statusHistoryForClaim,
+  statusHistoryByClaim,
+  recordWalmartIds,
+  getImportBatches,
+  recordImportBatch,
   getItemMaster,
   upsertItemMaster,
   getLedger,

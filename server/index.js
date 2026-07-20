@@ -13,6 +13,7 @@ const { parseRemittance } = require('./walmartFile');
 const { allocateCheck } = require('./allocator');
 const { postPlan } = require('./qboPost');
 const edi810 = require('./edi810');
+const apdp = require('./apdpImport');
 const { seedSandbox } = require('./seedSandbox');
 
 const app = express();
@@ -370,8 +371,89 @@ app.get(
   '/api/claims',
   wrap(async (req, res) => {
     const claims = store.getClaims().claims.slice().reverse();
-    const withStatus = claims.map((c) => ({ ...c, docsStatus: store.claimDocsStatus(c) }));
+    // Walmart's own adjudication, derived from the APDP status history. Kept
+    // separate from claim.status (our filing pipeline) — see store.js.
+    const historyByClaim = store.statusHistoryByClaim();
+    const withStatus = claims.map((c) => ({
+      ...c,
+      docsStatus: store.claimDocsStatus(c),
+      walmartStatus: apdp.rollUp(historyByClaim.get(c.id) || []),
+    }));
     res.json({ claims: withStatus, totals: summarizeClaims(claims) });
+  })
+);
+
+// --- Walmart APDP dispute status import ------------------------------------
+// Upload -> preview (nothing written) -> confirm -> append status history.
+// Mirrors the check-import flow: /api/apdp/analyze stashes the parse in the
+// session, /api/apdp/import commits it.
+
+app.post(
+  '/api/apdp/analyze',
+  upload.single('file'),
+  wrap(async (req, res) => {
+    if (!req.file) throw badRequest('No file uploaded.');
+    const parsed = apdp.parseApdp(req.file.buffer);
+    if (!parsed.rows.length) throw badRequest('No dispute rows found in the file.');
+
+    const batchId = `apdp-${new Date().toISOString().replace(/[:.]/g, '-')}-${crypto.randomBytes(3).toString('hex')}`;
+    const preview = apdp.buildPreview(
+      parsed.rows,
+      store.getClaims().claims,
+      store.getStatusHistory().entries,
+      { fileName: req.file.originalname || '', batchId }
+    );
+
+    req.session.apdp = { batchId, fileName: req.file.originalname || '', rows: parsed.rows };
+
+    res.json({ ...preview, warnings: parsed.warnings });
+  })
+);
+
+// Commit the previewed import. Re-runs the preview against current state so a
+// stale session can't write decisions made against data that has since moved.
+app.post(
+  '/api/apdp/import',
+  wrap(async (req, res) => {
+    const stash = req.session.apdp;
+    if (!stash) throw badRequest('No APDP file in this session. Please upload the export again.');
+
+    const claims = store.getClaims().claims;
+    const preview = apdp.buildPreview(stash.rows, claims, store.getStatusHistory().entries, {
+      fileName: stash.fileName,
+      batchId: stash.batchId,
+    });
+
+    const importedAt = new Date().toISOString();
+    const entries = apdp.historyEntries(preview, stash.rows, stash.batchId, importedAt);
+    const { appended, skipped } = store.appendStatusHistory(entries);
+
+    // Remember Walmart's identifiers on the claims we matched, so the next
+    // import can match by DisputeNbr directly.
+    const idsRecorded = store.recordWalmartIds(
+      preview.matched.map((m) => ({ claimId: m.claimId, disputeNbr: m.disputeNbr, caseNbr: m.caseNbr }))
+    );
+
+    store.recordImportBatch({
+      batchId: stash.batchId,
+      fileName: stash.fileName,
+      importedAt,
+      rowCount: stash.rows.length,
+      matched: preview.summary.matchedRows,
+      unmatched: preview.summary.unmatchedRows,
+      appended,
+      skipped,
+    });
+
+    delete req.session.apdp;
+    res.json({ ok: true, batchId: stash.batchId, appended, skipped, idsRecorded, summary: preview.summary });
+  })
+);
+
+app.get(
+  '/api/apdp/batches',
+  wrap(async (req, res) => {
+    res.json(store.getImportBatches());
   })
 );
 

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>WalmartCheck → QuickBooks</title>
-    <link rel="stylesheet" href="/styles.css?v=3" />
+    <link rel="stylesheet" href="/styles.css?v=4" />
   </head>
   <body>
     <header class="bar">
@@ -109,9 +109,33 @@
         <div class="actions" style="margin-top:0">
           <button class="btn primary" id="exportClaimsBtn">Export Recovery Submission</button>
           <button class="btn ghost" id="edi810Btn">Generate EDI 810</button>
+          <button class="btn ghost" id="apdpImportBtn">Import dispute status</button>
           <span class="hint">Export the .xlsx summary, then the EDI 810 re-invoice to send via your EDI provider</span>
         </div>
         <div id="disputesBody"></div>
+      </section>
+
+      <!-- Walmart APDP status import -->
+      <section class="card step hidden" id="step-apdp">
+        <div class="eyebrow">Disputes</div>
+        <h1>Import Walmart dispute status</h1>
+        <p class="sub">Upload the APDP <b>Disputes</b> export from Retail Link to record Walmart's actual
+          ruling on each dispute — approved, denied, cancelled or still pending. Nothing is written until
+          you confirm, and re-uploading an overlapping export is safe.</p>
+        <div id="apdpDrop" class="dropzone">
+          <input type="file" id="apdpFile" accept=".csv" hidden />
+          <div class="dz-inner">
+            <div class="dz-icon">↑</div>
+            <div><b>Choose the Disputes CSV</b> or drag it here</div>
+            <div class="sub small">Retail Link → APDP → Disputes → Export</div>
+          </div>
+        </div>
+        <div id="apdpPreview"></div>
+        <div class="actions hidden" id="apdpActions">
+          <button class="btn primary" id="apdpConfirmBtn">Record these statuses</button>
+          <button class="btn ghost" id="apdpCancelBtn">Cancel</button>
+          <span id="apdpHint" class="hint"></span>
+        </div>
       </section>
 
       <!-- History -->
@@ -147,6 +171,6 @@
     </main>
 
     <div id="toast" class="toast hidden"></div>
-    <script src="/app.js?v=3"></script>
+    <script src="/app.js?v=4"></script>
   </body>
 </html>

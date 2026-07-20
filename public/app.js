@@ -275,6 +275,162 @@ function renderResults(report, dryRun) {
   $('step-results').scrollIntoView({ behavior: 'smooth' });
 }
 
+// --- Walmart APDP dispute status import ------------------------------------
+
+const APDP_BUCKET_CLASS = { approved: 'good', denied: 'bad', cancelled: '', pending: '', unknown: '' };
+
+const APDP_BUCKET_LABEL = {
+  approved: 'Approved', denied: 'Denied', cancelled: 'Cancelled',
+  pending: 'Pending', mixed: 'Mixed', unknown: 'Unknown',
+};
+
+/**
+ * Walmart's own ruling on a claim, as a pill. Deliberately separate from the
+ * claim's own status: this is what Walmart says, not where we are in filing.
+ * A claim whose dispute lines disagree reads "Mixed" with the split spelled out
+ * rather than being flattened into a single verdict.
+ */
+function walmartStatusCell(ws) {
+  if (!ws) return '<span class="acct">—</span>';
+  const cls = ws.status === 'mixed' ? 'warn' : ws.status === 'approved' ? 'ok' : ws.status === 'denied' ? 'bad' : '';
+  const label = APDP_BUCKET_LABEL[ws.status] || ws.status;
+  const detail =
+    ws.status === 'mixed'
+      ? Object.entries(ws.counts).map(([b, n]) => `${n} ${APDP_BUCKET_LABEL[b] || b}`).join(', ')
+      : ws.lineCount > 1
+      ? `${ws.lineCount} lines`
+      : '';
+  const amt = ws.deniedAmount ? `<div class="acct small">${money(ws.deniedAmount)} denied</div>` : '';
+  return `<span class="pill ${cls}">${label}</span>${detail ? `<div class="acct small">${esc(detail)}</div>` : ''}${amt}`;
+}
+
+function showApdpImport() {
+  setNav('disputes');
+  document.querySelectorAll('main > .step').forEach((s) => s.classList.add('hidden'));
+  hide('sandboxBar');
+  show('step-apdp');
+}
+
+function setupApdpDropzone() {
+  const dz = $('apdpDrop');
+  const input = $('apdpFile');
+  dz.addEventListener('click', () => input.click());
+  dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('drag'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+  dz.addEventListener('drop', (e) => {
+    e.preventDefault(); dz.classList.remove('drag');
+    if (e.dataTransfer.files[0]) analyzeApdp(e.dataTransfer.files[0]);
+  });
+  input.addEventListener('change', () => { if (input.files[0]) analyzeApdp(input.files[0]); });
+}
+
+async function analyzeApdp(file) {
+  $('apdpPreview').innerHTML = `<p class="hint">Reading ${esc(file.name)}…</p>`;
+  hide('apdpActions');
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res = await fetch('/api/apdp/analyze', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not read that file.');
+    renderApdpPreview(data);
+  } catch (err) {
+    $('apdpPreview').innerHTML = `<p class="bad">${esc(err.message)}</p>`;
+    toast(err.message, true);
+  }
+}
+
+function renderApdpPreview(p) {
+  const s = p.summary;
+  const tiles =
+    tile('Dispute lines', p.rowCount) +
+    tile('Matched', s.matchedRows, s.matchedRows ? 'good' : '') +
+    tile('To record', s.willWrite, s.willWrite ? 'good' : '') +
+    tile('Unchanged', s.noops) +
+    tile('Needs review', s.unmatchedRows, s.unmatchedRows ? 'bad' : '');
+
+  const statusRows = Object.entries(p.statusCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([st, n]) => `<tr><td>${esc(st)}</td><td class="num">${n}</td></tr>`)
+    .join('');
+
+  const warn = (p.warnings || []).length
+    ? `<div class="note">${p.warnings.map((w) => esc(w)).join('<br>')}</div>`
+    : '';
+
+  // Matched rows carry the money and are what actually gets written — show them
+  // all. Unmatched is routinely thousands of rows (STAT's filings against
+  // invoices we never claimed), so it's summarized by reason and capped.
+  const matchedRows = p.matched
+    .map((m) => {
+      const cls = APDP_BUCKET_CLASS[m.bucket] || '';
+      const change =
+        m.change === 'noop'
+          ? '<span class="acct small">no change</span>'
+          : m.prevStatus
+          ? `<span class="acct small">${esc(m.prevStatus)} →</span> <b class="${cls}">${esc(m.status)}</b>`
+          : `<b class="${cls}">${esc(m.status)}</b>`;
+      const flag = m.poMismatch ? ' <span class="pill bad" title="PO differs from our claim">PO≠</span>' : '';
+      return `<tr>
+        <td>${esc(m.claimId)}${flag}</td>
+        <td>${esc(m.invoice)}</td>
+        <td>${esc(m.code)}</td>
+        <td class="num">${money(m.amount)}</td>
+        <td>${change}</td>
+        <td class="acct small">${esc(m.disputeNbr)}</td>
+      </tr>`;
+    })
+    .join('');
+
+  const byReason = {};
+  for (const u of p.unmatched) {
+    const key = u.reason.replace(/invoice \d+/, 'invoice …').replace(/\(ours: [^)]*\)/, '').replace(/\d+ claims? \([^)]*\)/, 'multiple claims');
+    byReason[key] = (byReason[key] || 0) + 1;
+  }
+  const reasonRows = Object.entries(byReason)
+    .sort((a, b) => b[1] - a[1])
+    .map(([r, n]) => `<tr><td>${esc(r)}</td><td class="num">${n}</td></tr>`)
+    .join('');
+
+  $('apdpPreview').innerHTML = `
+    <div class="tiles">${tiles}</div>
+    ${warn}
+    <h3>Walmart's ruling in this file</h3>
+    <table><thead><tr><th>Status</th><th class="num">Lines</th></tr></thead><tbody>${statusRows}</tbody></table>
+    <h3>Matched to your claims${s.matchedRows ? ` (${s.matchedRows})` : ''}</h3>
+    ${
+      s.matchedRows
+        ? `<table><thead><tr><th>Claim</th><th>Invoice</th><th>Code</th><th class="num">Amount</th><th>Status</th><th>Dispute #</th></tr></thead><tbody>${matchedRows}</tbody></table>`
+        : '<p class="hint">No dispute line in this file matches a claim on record. Nothing will be written.</p>'
+    }
+    <h3>Not matched (${s.unmatchedRows}) — no changes will be made to these</h3>
+    <p class="hint">These are dispute lines with no corresponding claim here — largely filings made against
+      invoices you haven't recorded a deduction for. They're listed by reason, not individually.</p>
+    <table><thead><tr><th>Reason</th><th class="num">Lines</th></tr></thead><tbody>${reasonRows}</tbody></table>
+  `;
+
+  show('apdpActions');
+  $('apdpConfirmBtn').disabled = s.willWrite === 0;
+  $('apdpHint').textContent = s.willWrite
+    ? `${s.willWrite} status ${s.willWrite === 1 ? 'entry' : 'entries'} across ${s.claimsAffected} claim(s). Nothing is written until you confirm.`
+    : 'Nothing new to record from this file.';
+}
+
+async function confirmApdpImport() {
+  $('apdpConfirmBtn').disabled = true;
+  try {
+    const res = await api('/api/apdp/import', { method: 'POST' });
+    toast(`Recorded ${res.appended} status ${res.appended === 1 ? 'entry' : 'entries'}.`);
+    $('apdpPreview').innerHTML = `<div class="note">Recorded <b>${res.appended}</b> status
+      ${res.appended === 1 ? 'entry' : 'entries'}${res.skipped ? `, skipped ${res.skipped} unchanged` : ''}.
+      Walmart's identifiers were saved on ${res.idsRecorded} claim(s) for faster matching next time.</div>`;
+    hide('apdpActions');
+  } catch (err) {
+    toast(err.message, true);
+    $('apdpConfirmBtn').disabled = false;
+  }
+}
+
 // --- history ---------------------------------------------------------------
 
 function setNav(view) {
@@ -356,12 +512,13 @@ async function loadClaims() {
         <td class="acct">${esc(c.shipDate || '—')}</td>
         <td>${docsCell}</td>
         <td><select class="clstatus" data-id="${esc(c.id)}">${opts}</select></td>
+        <td>${walmartStatusCell(c.walmartStatus)}</td>
         <td class="acct">${esc(c.newInvoice || '—')}</td>
       </tr>`;
     }).join('');
     body.innerHTML =
       `<div class="tbl-wrap"><table>
-        <thead><tr><th></th><th>Invoice</th><th>PO</th><th>Code</th><th class="num">Amount</th><th>Ship date</th><th>Docs</th><th>Status</th><th>New Inv #</th></tr></thead>
+        <thead><tr><th></th><th>Invoice</th><th>PO</th><th>Code</th><th class="num">Amount</th><th>Ship date</th><th>Docs</th><th>Status</th><th title="Walmart's own ruling, from the APDP import">Walmart</th><th>New Inv #</th></tr></thead>
         <tbody>${rows}</tbody></table></div>`;
     body.querySelectorAll('.clstatus').forEach((sel) =>
       sel.addEventListener('change', async (e) => {
@@ -702,6 +859,9 @@ $('navHistory').addEventListener('click', showHistory);
 $('navSettings').addEventListener('click', showSettings);
 $('exportClaimsBtn').addEventListener('click', exportClaims);
 $('edi810Btn').addEventListener('click', generateEdi810);
+$('apdpImportBtn').addEventListener('click', showApdpImport);
+$('apdpConfirmBtn').addEventListener('click', confirmApdpImport);
+$('apdpCancelBtn').addEventListener('click', showDisputes);
 $('connectBtn').addEventListener('click', () => (window.location.href = '/auth/connect'));
 $('disconnectBtn').addEventListener('click', async () => { await api('/api/disconnect', { method: 'POST' }); refreshStatus(); });
 $('dryRunBtn').addEventListener('click', () => doPost(true));
@@ -725,4 +885,5 @@ $('setupSandboxBtn').addEventListener('click', async () => {
 });
 
 setupDropzone();
+setupApdpDropzone();
 refreshStatus().catch((e) => toast(e.message, true));
