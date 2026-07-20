@@ -110,9 +110,23 @@
           <button class="btn primary" id="exportClaimsBtn">Export Recovery Submission</button>
           <button class="btn ghost" id="edi810Btn">Generate EDI 810</button>
           <button class="btn ghost" id="apdpImportBtn">Import dispute status</button>
+          <button class="btn ghost" id="denialsBtn">Denials to follow up</button>
           <span class="hint">Export the .xlsx summary, then the EDI 810 re-invoice to send via your EDI provider</span>
         </div>
         <div id="disputesBody"></div>
+      </section>
+
+      <!-- Denial follow-up -->
+      <section class="card step hidden" id="step-denials">
+        <div class="eyebrow">Disputes</div>
+        <h1>Denials to follow up</h1>
+        <p class="sub">Disputes you filed that Walmart denied — bucketed by why, with a drafted appeal.
+          A shortage denial almost always just needs your signed proof of delivery, then a re-file.</p>
+        <div id="denialsTotals" class="tiles"></div>
+        <div class="actions" style="margin-top:0">
+          <button class="btn ghost" id="denialsBackBtn">← Back to disputes</button>
+        </div>
+        <div id="denialsBody"></div>
       </section>
 
       <!-- Walmart APDP status import -->

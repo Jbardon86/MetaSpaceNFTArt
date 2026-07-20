@@ -11,6 +11,7 @@ const qbo = require('./quickbooks');
 const store = require('./store');
 const { parseRemittance } = require('./walmartFile');
 const { allocateCheck } = require('./allocator');
+const denials = require('./denials');
 const { postPlan } = require('./qboPost');
 const edi810 = require('./edi810');
 const apdp = require('./apdpImport');
@@ -581,13 +582,47 @@ app.post(
   })
 );
 
-// --- Claim documents (dispute proof) --------------------------------------
+// --- Denial follow-up (stage 6) -------------------------------------------
 
 function findClaimOr404(id) {
   const claim = store.getClaims().claims.find((c) => c.id === id);
   if (!claim) throw badRequest('Claim not found.');
   return claim;
 }
+
+// The follow-up worklist: our tracked claims Walmart denied, bucketed by why,
+// with a drafted appeal and the suggested next step. Reads the APDP status
+// history (Walmart's ruling) — never changes it.
+app.get(
+  '/api/denials',
+  wrap(async (req, res) => {
+    const claims = store.getClaims().claims;
+    const historyByClaim = store.statusHistoryByClaim();
+    res.json(denials.buildWorklist(claims, historyByClaim, apdp.rollUp));
+  })
+);
+
+// Re-file a denied claim: once its proof of delivery is attached, send it back
+// to "ready" so it flows through the export/EDI path again with a fresh rebill
+// number. Walmart's recorded ruling (walmartStatus) is left untouched — this
+// only moves OUR pipeline status, per the deliberate separation.
+app.post(
+  '/api/claims/:id/refile',
+  wrap(async (req, res) => {
+    const claim = findClaimOr404(req.params.id);
+    if (!store.claimDocsStatus(claim).complete) {
+      throw badRequest('Attach the proof of delivery first — that is usually what a denied shortage needs.');
+    }
+    const updated = store.updateClaim(claim.id, {
+      status: 'ready',
+      refileCount: (claim.refileCount || 0) + 1,
+      newInvoice: null, // gets a fresh rebill number on the next export
+    });
+    res.json({ ok: true, claim: { ...updated, docsStatus: store.claimDocsStatus(updated) } });
+  })
+);
+
+// --- Claim documents (dispute proof) --------------------------------------
 
 function round2(n) {
   return Math.round(((Number(n) || 0) + Number.EPSILON) * 100) / 100;

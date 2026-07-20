@@ -311,6 +311,96 @@ function showApdpImport() {
   show('step-apdp');
 }
 
+// --- Denial follow-up (stage 6) --------------------------------------------
+
+const DENIAL_ACTIONS = {
+  're-file': ['Ready to re-file', 'ok'],
+  'attach-pod': ['Needs proof of delivery', 'warn'],
+  review: ['Review', ''],
+  duplicate: ['Duplicate', ''],
+  expired: ['Past window', ''],
+  upheld: ['Walmart upheld', ''],
+};
+
+function showDenials() {
+  setNav('disputes');
+  document.querySelectorAll('main > .step').forEach((s) => s.classList.add('hidden'));
+  hide('sandboxBar');
+  show('step-denials');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  loadDenials();
+}
+
+async function loadDenials() {
+  const body = $('denialsBody');
+  body.innerHTML = '<p class="sub">Loading…</p>';
+  try {
+    const { items, totals } = await api('/api/denials');
+    $('denialsTotals').innerHTML =
+      tile('Denials', totals.count) +
+      tile('Recoverable', money(totals.recoverableAmount), totals.recoverableAmount ? 'bad' : '') +
+      tile('Ready to re-file', totals.readyToRefile, totals.readyToRefile ? 'good' : '') +
+      tile('Need a POD', totals.needPod, totals.needPod ? 'bad' : '');
+    if (!items.length) {
+      body.innerHTML =
+        '<p class="sub">No denials on your tracked disputes yet. Once you import an APDP export and any dispute you filed was denied, it shows up here — bucketed by why, with a drafted appeal — so you can re-file it.</p>';
+      return;
+    }
+    body.innerHTML = items.map(denialCard).join('');
+    body.querySelectorAll('[data-refile]').forEach((btn) =>
+      btn.addEventListener('click', () => refileDenial(btn.dataset.refile))
+    );
+    body.querySelectorAll('[data-copy]').forEach((btn) =>
+      btn.addEventListener('click', () => {
+        if (navigator.clipboard) navigator.clipboard.writeText(btn.dataset.copy);
+        toast('Appeal text copied.');
+      })
+    );
+  } catch (err) {
+    body.innerHTML = `<div class="banner warn">${esc(err.message)}</div>`;
+  }
+}
+
+function denialCard(d) {
+  const [label, cls] = DENIAL_ACTIONS[d.action] || ['Review', ''];
+  const ev = d.evidence || {};
+  const cited = d.denialComment
+    ? esc(d.denialComment)
+    : ev.rcvDate
+    ? `Walmart cites receipt ${esc(ev.rcvDate)}${ev.proNbr ? ' (PRO ' + esc(ev.proNbr) + ')' : ''}`
+    : '—';
+  const actionBtn =
+    d.action === 're-file'
+      ? `<button class="btn small" data-refile="${esc(d.claimId)}">Re-file</button>`
+      : d.action === 'attach-pod'
+      ? '<span class="hint">Attach the BOL on the Disputes tab, then re-file</span>'
+      : '';
+  return `<div class="denial">
+    <div class="denial-head">
+      <span class="pill ${cls}">${label}</span>
+      <b>${money(d.amount)}</b>
+      <span class="acct">inv ${esc(d.invoice)} · [${esc(d.code)}] · dispute ${esc(d.disputeNbr || '—')}</span>
+      ${d.refileCount ? `<span class="acct small">re-filed ${d.refileCount}×</span>` : ''}
+    </div>
+    <div class="denial-line"><span class="doclabel">Walmart's reason</span> <span>${cited}</span></div>
+    <div class="denial-line"><span class="doclabel">Draft appeal</span> <span class="appeal-text">${esc(d.appeal)}</span></div>
+    <div class="denial-foot">
+      ${actionBtn}
+      <button class="btn tiny ghost" data-copy="${esc(d.appeal)}">Copy appeal</button>
+    </div>
+  </div>`;
+}
+
+async function refileDenial(id) {
+  try {
+    await api(`/api/claims/${encodeURIComponent(id)}/refile`, { method: 'POST' });
+    toast('Re-filed — moved back to Ready to file. Export it again to submit.');
+    loadDenials();
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
 function setupApdpDropzone() {
   const dz = $('apdpDrop');
   const input = $('apdpFile');
@@ -862,6 +952,8 @@ $('edi810Btn').addEventListener('click', generateEdi810);
 $('apdpImportBtn').addEventListener('click', showApdpImport);
 $('apdpConfirmBtn').addEventListener('click', confirmApdpImport);
 $('apdpCancelBtn').addEventListener('click', showDisputes);
+$('denialsBtn').addEventListener('click', showDenials);
+$('denialsBackBtn').addEventListener('click', showDisputes);
 $('connectBtn').addEventListener('click', () => (window.location.href = '/auth/connect'));
 $('disconnectBtn').addEventListener('click', async () => { await api('/api/disconnect', { method: 'POST' }); refreshStatus(); });
 $('dryRunBtn').addEventListener('click', () => doPost(true));
