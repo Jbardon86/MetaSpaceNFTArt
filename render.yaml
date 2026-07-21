@@ -34,3 +34,16 @@ services:
         sync: false
       - key: MAIL_FROM
         value: Endless Fun <order@endlessfun.biz>
+
+  # Hosted web version of the app — a shareable link anyone can open in a browser.
+  - type: web
+    name: endlessfun-orders-web
+    runtime: static
+    branch: claude/tradeshow-order-app-889w6d
+    rootDir: tradeshow-app
+    buildCommand: npm install && npx expo export --platform web
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
