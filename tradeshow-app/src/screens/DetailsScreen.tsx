@@ -73,8 +73,22 @@ export default function DetailsScreen({ navigation }: ScreenProps<'Details'>) {
 
   const canContinue = name.trim().length > 0 && (email.trim().length > 0 || phone.trim().length > 0);
 
+  // Ask for camera access; returns true if we can proceed.
+  const ensureCamera = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert(
+        'Camera access needed',
+        'Please allow camera access in Settings to scan. (If nothing happened, make sure you have the latest app build installed.)'
+      );
+      return false;
+    }
+    return true;
+  };
+
   // Take a photo of a business card; AI fills in the fields.
   const scanCard = async () => {
+    if (!(await ensureCamera())) return;
     const res = await ImagePicker.launchCameraAsync({
       mediaTypes: ['images'],
       quality: 0.5,
@@ -103,6 +117,7 @@ export default function DetailsScreen({ navigation }: ScreenProps<'Details'>) {
   // Take a photo of a filled sales order form; AI fills the customer AND builds
   // the cart (matching items to the catalog), then jumps to review.
   const scanForm = async () => {
+    if (!(await ensureCamera())) return;
     const res = await ImagePicker.launchCameraAsync({
       mediaTypes: ['images'],
       quality: 0.5,
