@@ -129,6 +129,67 @@ async function scanBusinessCard(imageBase64, mediaType) {
   return JSON.parse(match ? match[0] : '{}');
 }
 
+// Sales-order-form scan: reads a filled order form AND matches each line to a
+// real product in the SOS catalog, so the app can build the cart automatically.
+async function scanOrderForm(imageBase64, mediaType, catalog) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) throw new Error('ANTHROPIC_API_KEY not set');
+  const compact = catalog.slice(0, 400).map((p) => ({ id: p.id, name: p.name, sku: p.sku }));
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: process.env.SCAN_MODEL || 'claude-haiku-4-5-20251001',
+      max_tokens: 1500,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: mediaType || 'image/jpeg', data: imageBase64 },
+            },
+            {
+              type: 'text',
+              text:
+                'This is a photo of a sales order form. Extract the customer info and the ordered line items.\n' +
+                'Here is our product catalog as JSON (id, name, sku):\n' +
+                JSON.stringify(compact) +
+                '\nFor each line item on the form, match it to the best catalog product and return that product id in "catalogId" (or null if there is no good match). ' +
+                'Respond with ONLY minified JSON, no prose, using exactly these keys: ' +
+                '{"customer":{"name":"","company":"","email":"","phone":"","street":"","city":"","state":"","zip":""},' +
+                '"lines":[{"catalogId":"","description":"","quantity":0}],"notes":""}. ' +
+                'Use empty strings / null / 0 where unknown.',
+            },
+          ],
+        },
+      ],
+    }),
+  });
+  if (!res.ok) throw new Error(`Vision API ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  const text = (data.content && data.content[0] && data.content[0].text) || '{}';
+  const match = text.match(/\{[\s\S]*\}/);
+  return JSON.parse(match ? match[0] : '{}');
+}
+
+app.post('/api/scan-order', async (req, res) => {
+  const { imageBase64, mediaType } = req.body || {};
+  if (!imageBase64) return res.status(400).json({ error: 'imageBase64 required' });
+  try {
+    const catalog = process.env.SOS_REFRESH_TOKEN ? await sos.getCatalog() : [];
+    const result = await scanOrderForm(imageBase64, mediaType, catalog);
+    res.json(result);
+  } catch (err) {
+    console.error('Order-form scan failed:', err);
+    res.status(502).json({ error: String(err && err.message ? err.message : err) });
+  }
+});
+
 app.post('/api/scan-card', async (req, res) => {
   const { imageBase64, mediaType } = req.body || {};
   if (!imageBase64) return res.status(400).json({ error: 'imageBase64 required' });

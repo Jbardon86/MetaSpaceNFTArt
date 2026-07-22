@@ -9,6 +9,7 @@ import { ScreenProps } from '../navigation';
 import { Address } from '../types';
 import { BACKEND_URL } from '../config';
 import { scanBusinessCard } from '../scan/card';
+import { scanOrderForm } from '../scan/order';
 import { colors, font, spacing } from '../theme';
 
 // Reusable street/city/state/zip inputs for ship-to and bill-to.
@@ -59,7 +60,7 @@ function AddressFields({
 // Customer enters their own details. Deliberately a plain form — no search of
 // existing customers, so no one sees anyone else's information.
 export default function DetailsScreen({ navigation }: ScreenProps<'Details'>) {
-  const { addCustomer } = useApp();
+  const { addCustomer, products } = useApp();
   const draft = useDraft();
   const insets = useSafeAreaInsets();
 
@@ -99,6 +100,63 @@ export default function DetailsScreen({ navigation }: ScreenProps<'Details'>) {
     }
   };
 
+  // Take a photo of a filled sales order form; AI fills the customer AND builds
+  // the cart (matching items to the catalog), then jumps to review.
+  const scanForm = async () => {
+    const res = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.5,
+      base64: true,
+    });
+    if (res.canceled || !res.assets?.[0]?.base64) return;
+    setScanning(true);
+    try {
+      const order = await scanOrderForm(res.assets[0].base64, 'image/jpeg');
+      if (!order) return;
+      const c = order.customer || ({} as typeof order.customer);
+      if (c.name) setName(c.name);
+      if (c.company) setCompany(c.company);
+      if (c.email) setEmail(c.email);
+      if (c.phone) setPhone(c.phone);
+      if (c.street || c.city || c.zip) {
+        draft.updateShipTo({ street: c.street, city: c.city, state: c.state, zip: c.zip });
+      }
+      const created = await addCustomer({
+        name: (c.name || '').trim(),
+        company: (c.company || '').trim(),
+        email: (c.email || '').trim(),
+        phone: (c.phone || '').trim(),
+      });
+      draft.setCustomer(created);
+
+      let added = 0;
+      const unmatched: string[] = [];
+      for (const line of order.lines) {
+        const p = line.catalogId ? products.find((x) => x.id === line.catalogId) : null;
+        if (p) {
+          draft.addProduct(p);
+          if (line.quantity > 0) draft.setQuantity(p.id, line.quantity);
+          added += 1;
+        } else if (line.description) {
+          unmatched.push(line.description);
+        }
+      }
+      if (order.notes) draft.setNotes(order.notes);
+
+      navigation.navigate('OrderReview');
+      if (unmatched.length > 0) {
+        Alert.alert(
+          'Review needed',
+          `Added ${added} item(s). Couldn't match: ${unmatched.join(', ')}. Add those manually.`
+        );
+      }
+    } catch (e) {
+      Alert.alert('Scan failed', e instanceof Error ? e.message : 'Please enter the order manually.');
+    } finally {
+      setScanning(false);
+    }
+  };
+
   const cont = async () => {
     const created = await addCustomer({
       name: name.trim(),
@@ -122,12 +180,20 @@ export default function DetailsScreen({ navigation }: ScreenProps<'Details'>) {
         {BACKEND_URL ? (
           <View style={{ marginTop: spacing.lg }}>
             <Button
-              title={scanning ? 'Reading card…' : '📷 Scan business card'}
-              variant="secondary"
-              onPress={scanCard}
+              title={scanning ? 'Reading…' : '📄 Scan order form'}
+              onPress={scanForm}
               loading={scanning}
             />
-            <Text style={styles.scanHint}>Snap a photo to auto-fill the fields.</Text>
+            <View style={{ height: spacing.sm }} />
+            <Button
+              title="📷 Scan business card"
+              variant="secondary"
+              onPress={scanCard}
+              disabled={scanning}
+            />
+            <Text style={styles.scanHint}>
+              Snap an order form to build the whole order, or a card to fill contact info.
+            </Text>
           </View>
         ) : null}
 
