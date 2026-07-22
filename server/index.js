@@ -88,6 +88,59 @@ function buildConfirmationEmail(order) {
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
+// Business-card scan: the app sends a photo (base64), we use AI vision to pull
+// out the contact fields so reps don't have to type them.
+async function scanBusinessCard(imageBase64, mediaType) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) throw new Error('ANTHROPIC_API_KEY not set');
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: process.env.SCAN_MODEL || 'claude-haiku-4-5-20251001',
+      max_tokens: 500,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: mediaType || 'image/jpeg', data: imageBase64 },
+            },
+            {
+              type: 'text',
+              text:
+                'This is a photo of a business card. Extract the contact info and respond with ONLY minified JSON, no prose, using exactly these keys: ' +
+                'name, company, email, phone, street, city, state, zip. Use empty strings for anything not present.',
+            },
+          ],
+        },
+      ],
+    }),
+  });
+  if (!res.ok) throw new Error(`Vision API ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  const text = (data.content && data.content[0] && data.content[0].text) || '{}';
+  const match = text.match(/\{[\s\S]*\}/);
+  return JSON.parse(match ? match[0] : '{}');
+}
+
+app.post('/api/scan-card', async (req, res) => {
+  const { imageBase64, mediaType } = req.body || {};
+  if (!imageBase64) return res.status(400).json({ error: 'imageBase64 required' });
+  try {
+    const fields = await scanBusinessCard(imageBase64, mediaType);
+    res.json({ fields });
+  } catch (err) {
+    console.error('Card scan failed:', err);
+    res.status(502).json({ error: String(err && err.message ? err.message : err) });
+  }
+});
+
 // The app fetches the shared product catalog from SOS Inventory here.
 app.get('/api/catalog', async (req, res) => {
   if (!process.env.SOS_REFRESH_TOKEN) {

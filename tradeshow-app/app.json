@@ -40,7 +40,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos to add product images."
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos to add product images.",
+          "cameraPermission": "Allow $(PRODUCT_NAME) to use the camera to scan business cards."
         }
       ]
     ]

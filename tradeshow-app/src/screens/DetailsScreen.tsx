@@ -1,11 +1,14 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Field } from '../components/ui';
 import { useApp } from '../store/AppContext';
 import { useDraft } from '../store/OrderDraft';
 import { ScreenProps } from '../navigation';
 import { Address } from '../types';
+import { BACKEND_URL } from '../config';
+import { scanBusinessCard } from '../scan/card';
 import { colors, font, spacing } from '../theme';
 
 // Reusable street/city/state/zip inputs for ship-to and bill-to.
@@ -65,8 +68,36 @@ export default function DetailsScreen({ navigation }: ScreenProps<'Details'>) {
   const [company, setCompany] = useState(draft.customer?.company ?? '');
   const [email, setEmail] = useState(draft.customer?.email ?? '');
   const [phone, setPhone] = useState(draft.customer?.phone ?? '');
+  const [scanning, setScanning] = useState(false);
 
   const canContinue = name.trim().length > 0 && (email.trim().length > 0 || phone.trim().length > 0);
+
+  // Take a photo of a business card; AI fills in the fields.
+  const scanCard = async () => {
+    const res = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.5,
+      base64: true,
+    });
+    if (res.canceled || !res.assets?.[0]?.base64) return;
+    setScanning(true);
+    try {
+      const f = await scanBusinessCard(res.assets[0].base64, 'image/jpeg');
+      if (f) {
+        if (f.name) setName(f.name);
+        if (f.company) setCompany(f.company);
+        if (f.email) setEmail(f.email);
+        if (f.phone) setPhone(f.phone);
+        if (f.street || f.city || f.zip) {
+          draft.updateShipTo({ street: f.street, city: f.city, state: f.state, zip: f.zip });
+        }
+      }
+    } catch (e) {
+      Alert.alert('Scan failed', e instanceof Error ? e.message : 'Please enter the details manually.');
+    } finally {
+      setScanning(false);
+    }
+  };
 
   const cont = async () => {
     const created = await addCustomer({
@@ -87,6 +118,18 @@ export default function DetailsScreen({ navigation }: ScreenProps<'Details'>) {
       >
         <Text style={styles.heading}>Your details</Text>
         <Text style={styles.sub}>So we can follow up on your order.</Text>
+
+        {BACKEND_URL ? (
+          <View style={{ marginTop: spacing.lg }}>
+            <Button
+              title={scanning ? 'Reading card…' : '📷 Scan business card'}
+              variant="secondary"
+              onPress={scanCard}
+              loading={scanning}
+            />
+            <Text style={styles.scanHint}>Snap a photo to auto-fill the fields.</Text>
+          </View>
+        ) : null}
 
         <Card style={{ marginTop: spacing.lg }}>
           <Field label="Your name" value={name} onChangeText={setName} placeholder="First and last name" autoCapitalize="words" />
@@ -132,6 +175,7 @@ export default function DetailsScreen({ navigation }: ScreenProps<'Details'>) {
 const styles = StyleSheet.create({
   heading: { fontSize: font.h1, fontWeight: '800', color: colors.text },
   sub: { fontSize: font.body, color: colors.textMuted, marginTop: spacing.xs },
+  scanHint: { fontSize: font.small, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm },
   sectionHeading: {
     fontSize: font.h3,
     fontWeight: '800',

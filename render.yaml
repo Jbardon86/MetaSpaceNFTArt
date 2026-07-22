@@ -13,6 +13,9 @@ services:
     healthCheckPath: /health
     envVars:
       # SOS Inventory (shared catalog)
+      # Business-card scanning (AI vision)
+      - key: ANTHROPIC_API_KEY
+        sync: false
       - key: SOS_BASE_URL
         value: https://api.sosinventory.com
       - key: SOS_CLIENT_ID
