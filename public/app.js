@@ -959,7 +959,25 @@ $('connectBtn').addEventListener('click', () => (window.location.href = '/auth/c
 $('disconnectBtn').addEventListener('click', async () => { await api('/api/disconnect', { method: 'POST' }); refreshStatus(); });
 $('dryRunBtn').addEventListener('click', () => doPost(true));
 $('backfillBtn').addEventListener('click', doBackfill);
-$('postBtn').addEventListener('click', () => { if (confirm('Post this Receive Payment and Bank Deposit to QuickBooks?')) doPost(false); });
+// Two-click confirm instead of a native confirm() dialog — browsers silently
+// suppress repeated native dialogs, which made the button appear to do nothing.
+let postArmTimer = null;
+function disarmPost() {
+  clearTimeout(postArmTimer);
+  postArmTimer = null;
+  $('postBtn').classList.remove('confirming');
+  $('postBtn').textContent = 'Post to QuickBooks';
+}
+$('postBtn').addEventListener('click', () => {
+  if (postArmTimer) {
+    disarmPost();
+    doPost(false);
+    return;
+  }
+  $('postBtn').classList.add('confirming');
+  $('postBtn').textContent = 'Click again to confirm';
+  postArmTimer = setTimeout(disarmPost, 5000);
+});
 $('startOverBtn').addEventListener('click', () => location.reload());
 $('logoutBtn').addEventListener('click', async () => { await fetch('/logout', { method: 'POST' }).catch(() => {}); location.href = '/login'; });
 $('setupSandboxBtn').addEventListener('click', async () => {

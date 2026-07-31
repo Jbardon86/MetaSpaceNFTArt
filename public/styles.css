@@ -130,6 +130,7 @@ h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
 .btn:active { transform: scale(0.98); }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 .btn.primary { background: var(--accent); color: #fff; }
+.btn.primary.confirming { background: var(--warn); }
 .btn.primary:hover:not(:disabled) { background: var(--accent-press); }
 .btn.ghost { background: var(--chip); color: var(--text); }
 .btn.ghost:hover:not(:disabled) { background: var(--chip-hover); }
