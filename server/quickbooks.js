@@ -222,6 +222,26 @@ async function findInvoiceByDocNumber(docNumber) {
 }
 
 /**
+ * Look up many invoices in a single query (chunked). Returns a Map of
+ * DocNumber -> invoice, so a check with many lines resolves in ~1 round-trip
+ * instead of one per invoice.
+ */
+async function findInvoicesByDocNumbers(docNumbers) {
+  const unique = [...new Set((docNumbers || []).map((d) => String(d).trim()).filter(Boolean))];
+  const out = new Map();
+  const CHUNK = 30;
+  for (let i = 0; i < unique.length; i += CHUNK) {
+    const batch = unique.slice(i, i + CHUNK);
+    const list = batch.map((d) => `'${d.replace(/'/g, "\\'")}'`).join(',');
+    const qr = await query(
+      `SELECT Id, DocNumber, CustomerRef, Balance, TotalAmt FROM Invoice WHERE DocNumber IN (${list}) MAXRESULTS 1000`
+    );
+    for (const inv of qr.Invoice || []) out.set(String(inv.DocNumber), inv);
+  }
+  return out;
+}
+
+/**
  * Fetch an invoice's line items + memo, for building the EDI 810 re-invoice.
  * Returns { lines: [{description, quantity, unitPrice}], privateNote, txnDate }
  * or null. Discount / non-item lines (no unit price) are dropped.
@@ -371,6 +391,7 @@ module.exports = {
   createCustomer,
   ensureCustomer,
   findInvoiceByDocNumber,
+  findInvoicesByDocNumbers,
   getInvoiceForEdi,
   getInvoicePdf,
   buildAccountResolver,

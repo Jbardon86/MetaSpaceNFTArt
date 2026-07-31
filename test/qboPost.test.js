@@ -131,6 +131,34 @@ test('postPlan does NOT flag an open (unpaid) check', async () => {
   assert.ok(!review.alreadyInQuickBooks);
 });
 
+test('postPlan batch-prefetches invoices in one call instead of one-by-one', async () => {
+  const accountIds = { 'Undeposited Funds': '90', 'American National': '35', 'Disputed AR': '80', 'Merchant Deposit Fees': '81' };
+  let prefetchCalls = 0;
+  let prefetchedDocs = null;
+  let perInvoiceLookups = 0;
+  const cache = new Map();
+  const deps = {
+    findCustomerId: async () => '7',
+    prefetchInvoices: async (docs) => {
+      prefetchCalls++;
+      prefetchedDocs = docs;
+      // simulate the batched query populating a cache
+      for (const d of docs) cache.set(String(d), { id: 'inv' + d, customerId: '42', balance: 100 });
+    },
+    findInvoiceId: async (doc) => {
+      if (cache.has(String(doc))) return cache.get(String(doc));
+      perInvoiceLookups++; // should NOT happen once prefetched
+      return null;
+    },
+    accountIdFor: (label) => accountIds[label] || null,
+  };
+  const report = await postPlan(plan(), deps, { dryRun: true });
+  assert.strictEqual(prefetchCalls, 1, 'prefetch runs exactly once');
+  assert.deepStrictEqual(prefetchedDocs.sort(), ['46364', '46367'], 'prefetch gets all invoice numbers');
+  assert.strictEqual(perInvoiceLookups, 0, 'no per-invoice fallback lookups when prefetched');
+  assert.strictEqual(report.payloads.payment.Line.length, 2);
+});
+
 test('postPlan flags a missing invoice instead of failing', async () => {
   const deps = {
     findCustomerId: async () => '7',

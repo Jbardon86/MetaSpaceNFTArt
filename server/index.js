@@ -134,22 +134,33 @@ function wrap(handler) {
 async function buildPostDeps() {
   const accountsCfg = store.getAccounts();
   const accountIdFor = await qbo.buildAccountResolver(accountsCfg.accountNumbers || {});
+  // Cache invoices so a check with many lines doesn't hit QuickBooks once per
+  // invoice (25+ sequential round-trips would time the request out). prefetch
+  // loads them all in one batched query; findInvoiceId reads the cache.
+  const invoiceCache = new Map();
+  const toResult = (i) =>
+    i
+      ? {
+          id: i.Id,
+          customerId: i.CustomerRef && i.CustomerRef.value,
+          customerName: i.CustomerRef && i.CustomerRef.name,
+          balance: i.Balance,
+        }
+      : null;
   return {
     accountsCfg,
     deps: {
       findCustomerId: (name) => qbo.findCustomerByName(name).then((c) => (c ? c.Id : null)),
       ensureCustomerId: (name) => qbo.ensureCustomer(name).then((c) => (c ? c.Id : null)),
-      findInvoiceId: (doc) =>
-        qbo.findInvoiceByDocNumber(doc).then((i) =>
-          i
-            ? {
-                id: i.Id,
-                customerId: i.CustomerRef && i.CustomerRef.value,
-                customerName: i.CustomerRef && i.CustomerRef.name,
-                balance: i.Balance,
-              }
-            : null
-        ),
+      prefetchInvoices: async (docNumbers) => {
+        const map = await qbo.findInvoicesByDocNumbers(docNumbers);
+        for (const [doc, inv] of map) invoiceCache.set(doc, inv);
+      },
+      findInvoiceId: async (doc) => {
+        const key = String(doc);
+        if (invoiceCache.has(key)) return toResult(invoiceCache.get(key));
+        return toResult(await qbo.findInvoiceByDocNumber(doc));
+      },
       accountIdFor,
       ensureWriteOffItemId: () => qbo.ensureWriteOffItem(accountIdFor(accountsCfg.paymentWriteOff)),
       createCreditMemo: qbo.createCreditMemo,

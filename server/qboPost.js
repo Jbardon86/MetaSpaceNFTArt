@@ -150,6 +150,17 @@ async function postPlan(plan, deps, opts = {}) {
     throw e;
   }
 
+  // Load every invoice in one batched query so a check with many lines doesn't
+  // make one round-trip per invoice (which times the request out). Optional —
+  // falls back to per-invoice lookups when a caller doesn't provide it.
+  if (deps.prefetchInvoices) {
+    try {
+      await deps.prefetchInvoices(plan.receivePayment.invoices.map((i) => i.invoice));
+    } catch (_) {
+      /* fall back to per-invoice lookups below */
+    }
+  }
+
   // Match invoices; flag any that are missing. Capture the invoices' own
   // customer so the payment is applied as that customer (findInvoiceId may
   // return an object {id, customerId} or, in older/test fakes, a bare id).
