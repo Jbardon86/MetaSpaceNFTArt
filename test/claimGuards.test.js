@@ -27,3 +27,20 @@ test('missingIdentifiers reports each missing field independently', () => {
 test('missingIdentifiers passes a fully-identified claim', () => {
   assert.deepStrictEqual(missingIdentifiers({ po: '5501001222', whse: '6017' }), []);
 });
+
+test('POD/No-Merchandise (0025) claims are exempt from the PO requirement', () => {
+  // No PO exists for these DSD/POD disputes; only the store/DC is needed.
+  for (const code of ['0025', '25', '[0025]']) {
+    assert.deepStrictEqual(
+      missingIdentifiers({ po: '0000000000', whse: '7087', code }),
+      [],
+      `code ${code} should not require a PO`
+    );
+  }
+  // ...but the DC is still required even for a POD claim.
+  assert.deepStrictEqual(missingIdentifiers({ po: '0000000000', whse: '0', code: '0025' }), ['DC/Whse']);
+});
+
+test('the PO exemption does not leak to re-invoice codes like 0022', () => {
+  assert.deepStrictEqual(missingIdentifiers({ po: '0000000000', whse: '7087', code: '0022' }), ['PO']);
+});

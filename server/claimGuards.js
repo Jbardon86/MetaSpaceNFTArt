@@ -12,12 +12,33 @@ function isBlankOrZero(v) {
   return s === '' || /^0+$/.test(s);
 }
 
+// Bare numeric form of a deduction code — strip brackets/padding so "[0025]",
+// "0025", and "25" all compare equal.
+function bareCode(v) {
+  const digits = String(v == null ? '' : v).replace(/\D/g, '');
+  return digits.replace(/^0+/, '') || (digits ? '0' : '');
+}
+
+// Deduction codes whose disputes carry no PO by nature: POD / "no merchandise
+// received" claims are won with a proof-of-delivery document, not by re-invoicing
+// against a PO. For these a blank PO is expected, not an error — but the DC
+// (store/warehouse) is still required, since that's how the POD is located.
+// Extend as other document-based (non-re-invoice) codes surface.
+const NO_PO_CODES = new Set([
+  '25', // 0025 POD / No Merchandise Received For Invoice
+]);
+
+/** True when this claim's deduction code is a document dispute that needs no PO. */
+function isNoPoCode(code) {
+  return NO_PO_CODES.has(bareCode(code));
+}
+
 /** Which required identifiers a claim is missing ([] => submittable). */
 function missingIdentifiers(c) {
   const missing = [];
-  if (isBlankOrZero(c.po)) missing.push('PO');
+  if (!isNoPoCode(c.code) && isBlankOrZero(c.po)) missing.push('PO');
   if (isBlankOrZero(c.whse)) missing.push('DC/Whse');
   return missing;
 }
 
-module.exports = { isBlankOrZero, missingIdentifiers };
+module.exports = { isBlankOrZero, missingIdentifiers, isNoPoCode, NO_PO_CODES };
