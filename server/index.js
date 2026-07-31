@@ -932,6 +932,7 @@ app.post(
       const postedAt = new Date().toISOString();
       store.recordPosted({
         reference: plan.meta.checkNumber,
+        datePaid: plan.meta.datePaid,
         net: report.depositTotal,
         postedAt,
         steps: report.steps,

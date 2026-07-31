@@ -927,6 +927,7 @@ async function loadHistory() {
       const ids = [pay && `payment #${esc(pay.id)}`, dep && `deposit #${esc(dep.id)}`].filter(Boolean).join(' · ');
       return `<tr>
         <td>${esc(p.reference || '—')}</td>
+        <td class="acct">${p.datePaid ? esc(fmtDate(p.datePaid)) : '—'}</td>
         <td class="muted">${esc(fmtDate(p.postedAt))}</td>
         <td class="num">${money(p.net)}</td>
         <td class="acct">${ids || '—'}</td>
@@ -934,7 +935,7 @@ async function loadHistory() {
     }).join('');
     body.innerHTML =
       `<div class="tbl-wrap"><table>
-        <thead><tr><th>Check #</th><th>Posted</th><th class="num">Deposit</th><th>In QuickBooks</th></tr></thead>
+        <thead><tr><th>Check #</th><th>Check date</th><th>Posted</th><th class="num">Deposit</th><th>In QuickBooks</th></tr></thead>
         <tbody>${rows}</tbody></table></div>`;
   } catch (err) {
     body.innerHTML = `<div class="banner warn">${esc(err.message)}</div>`;
