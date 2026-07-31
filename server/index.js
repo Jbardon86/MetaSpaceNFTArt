@@ -343,6 +343,21 @@ app.post(
       next.nextNewInvoice = n;
     }
 
+    // EDI 810 transport identity (nested). senderId/qualifiers/receiver come from
+    // TrueCommerce; usage flips test vs production.
+    if (body.edi && typeof body.edi === 'object') {
+      const e = { ...next.edi };
+      for (const f of ['senderId', 'senderQual', 'receiverId', 'receiverQual']) {
+        if (body.edi[f] !== undefined) e[f] = String(body.edi[f]).trim();
+      }
+      if (body.edi.usage !== undefined) {
+        const u = String(body.edi.usage).trim().toUpperCase();
+        if (!['T', 'P'].includes(u)) throw badRequest("EDI usage must be 'T' (test) or 'P' (production).");
+        e.usage = u;
+      }
+      next.edi = e;
+    }
+
     store.saveWalmartConfig(next);
     res.json({ ok: true, config: next, minSafe: store.minSafeNewInvoice() });
   })
@@ -622,17 +637,39 @@ app.post(
     }
 
     const cfg = store.getWalmartConfig();
+    const ediCfg = cfg.edi || {};
+    // Guard the transport identity: the 810 must go out under the vendor's own
+    // EDI mailbox, never STAT's, and never to production before it's been set.
+    if (!ediCfg.senderId) {
+      throw badRequest(
+        'Set your EDI Sender ID (your TrueCommerce interchange ID) in Settings before generating an 810.'
+      );
+    }
+    if (ediCfg.senderId === edi810.STAT_SENDER_ID) {
+      throw badRequest(
+        `Sender ID ${edi810.STAT_SENDER_ID} is STAT's, not yours — set your own EDI Sender ID in Settings before sending.`
+      );
+    }
     const control = String(Date.now()).slice(-9);
     const { edi, warnings } = edi810.buildEdi810(items, {
       control,
       now: new Date().toISOString(),
       itemMaster: store.getItemMaster(),
+      config: {
+        senderId: ediCfg.senderId,
+        senderQual: ediCfg.senderQual,
+        receiverId: ediCfg.receiverId,
+        receiverQual: ediCfg.receiverQual,
+        usage: ediCfg.usage,
+      },
     });
 
     // URI-encode so any non-ASCII in a warning can't produce an invalid header.
     if (warnings.length) res.setHeader('X-Edi-Warnings', encodeURIComponent(JSON.stringify(warnings)));
+    res.setHeader('X-Edi-Usage', ediCfg.usage || 'T');
     res.setHeader('Content-Type', 'application/edi-x12');
-    res.setHeader('Content-Disposition', `attachment; filename="Walmart_810_${cfg.vendorNumber}.edi"`);
+    const tag = ediCfg.usage === 'P' ? 'PROD' : 'TEST';
+    res.setHeader('Content-Disposition', `attachment; filename="Walmart_810_${cfg.vendorNumber}_${tag}.edi"`);
     res.send(edi);
   })
 );

@@ -698,6 +698,43 @@ async function loadSettings() {
         </div>
       </div>`).join('');
 
+    const edi = config.edi || {};
+    const ediWarn = !edi.senderId
+      ? `<div class="banner warn">EDI Sender ID isn't set — the EDI 810 can't be generated until you enter your
+         TrueCommerce interchange ID below.</div>`
+      : edi.usage === 'P'
+      ? `<div class="banner warn"><b>Production mode.</b> Generated 810s transmit as real invoices to Walmart's AP.
+         Send a <b>Test</b> file and confirm TrueCommerce/Walmart accept it before switching to Production.</div>`
+      : '';
+    const ediFields = [
+      ['senderId', 'EDI Sender ID', 'Your own EDI mailbox / interchange (ISA) ID from TrueCommerce. Required to generate an 810 — and it must NOT be STAT\'s (5074121162).'],
+      ['senderQual', 'Sender qualifier', 'The ISA qualifier for your sender ID (TrueCommerce tells you — commonly 12 or ZZ).'],
+      ['receiverId', 'Walmart receiver ID', 'Walmart\'s interchange ID. Default 925485US00.'],
+      ['receiverQual', 'Receiver qualifier', 'Qualifier for the receiver ID. Default 08 for Walmart.'],
+    ];
+    const ediRows = `
+      <h3 class="set-h">EDI 810 submission</h3>
+      ${ediWarn}
+      ${ediFields.map(([key, label, hint]) => `
+      <div class="set-row">
+        <label for="set-edi-${key}">${label}</label>
+        <div>
+          <input type="text" id="set-edi-${key}" data-edikey="${key}" value="${esc(edi[key] || '')}" />
+          <span class="set-hint">${esc(hint)}</span>
+        </div>
+      </div>`).join('')}
+      <div class="set-row">
+        <label for="set-edi-usage">Mode</label>
+        <div>
+          <select id="set-edi-usage" data-edikey="usage">
+            <option value="T"${edi.usage !== 'P' ? ' selected' : ''}>Test</option>
+            <option value="P"${edi.usage === 'P' ? ' selected' : ''}>Production</option>
+          </select>
+          <span class="set-hint">Test marks the interchange as a test file (ISA usage T). Switch to Production only
+            after a test file has been accepted by TrueCommerce and Walmart.</span>
+        </div>
+      </div>`;
+
     body.innerHTML = warning + rows + `
       <div class="set-row">
         <label for="set-nextNewInvoice">Next New Inv #</label>
@@ -710,7 +747,7 @@ async function loadSettings() {
             reusing one gets the claim rejected by Walmart.
           </span>
         </div>
-      </div>
+      </div>` + ediRows + `
       <div class="actions">
         <button class="btn primary" id="saveSettingsBtn">Save</button>
         <span class="hint" id="settingsHint"></span>
@@ -728,6 +765,11 @@ async function saveSettings() {
     el.classList.remove('bad');
     payload[el.dataset.key] = el.value.trim();
   });
+  const edi = {};
+  document.querySelectorAll('#settingsBody [data-edikey]').forEach((el) => {
+    edi[el.dataset.edikey] = el.value.trim();
+  });
+  if (Object.keys(edi).length) payload.edi = edi;
   btn.disabled = true;
   $('settingsHint').textContent = 'Saving…';
   try {

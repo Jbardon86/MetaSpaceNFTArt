@@ -168,6 +168,24 @@ test('walmart config has the Recovery Submission defaults', () => {
   assert.ok(cfg.nextNewInvoice > 0);
 });
 
+test('EDI config defaults to blank sender, Walmart receiver, and test mode', () => {
+  const { edi } = store.getWalmartConfig();
+  assert.strictEqual(edi.senderId, '', 'sender must start blank, never STAT\'s');
+  assert.strictEqual(edi.receiverId, '925485US00');
+  assert.strictEqual(edi.usage, 'T', 'defaults to test, not production');
+});
+
+test('saving EDI identity round-trips and keeps its defaults for unset fields', () => {
+  const cfg = store.getWalmartConfig();
+  store.saveWalmartConfig({ ...cfg, edi: { ...cfg.edi, senderId: 'ENDLESSFUN01', usage: 'P' } });
+  const saved = store.getWalmartConfig();
+  assert.strictEqual(saved.edi.senderId, 'ENDLESSFUN01');
+  assert.strictEqual(saved.edi.usage, 'P');
+  assert.strictEqual(saved.edi.receiverId, '925485US00'); // untouched default preserved
+  // restore so later tests see the default
+  store.saveWalmartConfig(cfg);
+});
+
 // --- Rebill numbering safety ------------------------------------------------
 // Reusing an invoice number Walmart has already seen gets the claim rejected,
 // so the floor has to hold against both STAT's block and our own past exports.

@@ -32,14 +32,20 @@ const SEED_ITEM_MASTER = {
 const SUPPLIER = { name: 'Endless Fun LLC' };
 const SHIP_TO = { name: 'WALMART', addr: '702 SW 8TH ST', city: 'BENTONVILLE', state: 'AR', zip: '72716', country: 'US' };
 
-// EDI constants STAT used for this vendor / dept 92. Overridable via config.
+// EDI constants for this vendor / dept 92. Overridable via config — senderId is
+// the interchange (ISA) sender ID and MUST be the vendor's own EDI mailbox, not
+// STAT's. The vendor-level refs (refIA/refDP) are Endless Fun's vendor 540153,
+// so they carry over; only the transport identity (senderId + qualifiers) and
+// usage come from the saved config.
 const EDI_DEFAULTS = {
-  senderId: '5074121162',
-  receiverId: '925485US00',
+  senderId: '5074121162', // fallback only; the route supplies the saved value
+  senderQual: '12',
+  receiverId: '925485US00', // Walmart
+  receiverQual: '08',
   refIA: '540153921',
   refDP: '00092',
   refMR: '0033',
-  usage: 'P', // P = production, T = test
+  usage: 'P', // P = production, T = test (route defaults this to T)
 };
 
 // --- helpers ---------------------------------------------------------------
@@ -194,7 +200,8 @@ function buildEdi810(items, opts = {}) {
   }
 
   const isa =
-    `ISA*00*${' '.repeat(10)}*00*${' '.repeat(10)}*12*${padRight(cfg.senderId, 15)}*08*${padRight(cfg.receiverId, 15)}` +
+    `ISA*00*${' '.repeat(10)}*00*${' '.repeat(10)}` +
+    `*${padRight(cfg.senderQual, 2)}*${padRight(cfg.senderId, 15)}*${padRight(cfg.receiverQual, 2)}*${padRight(cfg.receiverId, 15)}` +
     `*${yymmdd}*${hhmm}*:*00501*${ctrl}*0*${cfg.usage}*>`;
   const gs = `GS*IN*${cfg.senderId}*${cfg.receiverId}*${ccyymmdd}*${hhmm}*${Number(ctrl)}*X*005010`;
   const ge = `GE*${transactions.length}*${Number(ctrl)}`;
@@ -205,6 +212,9 @@ function buildEdi810(items, opts = {}) {
   return { edi, transactions, warnings };
 }
 
+// STAT's interchange sender ID — the app must never transmit under it.
+const STAT_SENDER_ID = '5074121162';
+
 module.exports = {
   buildEdi810,
   buildTransaction,
@@ -213,4 +223,5 @@ module.exports = {
   upcFromMemo,
   SEED_ITEM_MASTER,
   EDI_DEFAULTS,
+  STAT_SENDER_ID,
 };

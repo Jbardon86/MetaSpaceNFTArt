@@ -93,6 +93,28 @@ test('buildEdi810 produces a valid, balanced X12 810 interchange', () => {
   assert.strictEqual(warnings.length, 0);
 });
 
+test('the interchange identity and usage come from the passed config', () => {
+  const { edi } = buildEdi810(
+    [{ claim: CLAIM, invoiceLines: [{ description: 'MM STRAW CHOCO 4PK', quantity: 1, unitPrice: 9.52 }] }],
+    {
+      ...OPTS,
+      config: { senderId: 'ENDLESSFUN01', senderQual: 'ZZ', receiverId: '925485US00', receiverQual: '08', usage: 'T' },
+    }
+  );
+  const segs = parse(edi);
+  const isa = segs[0].split('*');
+  // ISA05/06 = sender qualifier + id; ISA07/08 = receiver; ISA15 = usage flag.
+  assert.strictEqual(isa[5].trim(), 'ZZ');
+  assert.strictEqual(isa[6].trim(), 'ENDLESSFUN01');
+  assert.strictEqual(isa[7].trim(), '08');
+  assert.strictEqual(isa[8].trim(), '925485US00');
+  assert.strictEqual(isa[15], 'T'); // test interchange
+  // GS carries the same application sender/receiver.
+  const gs = segs[1].split('*');
+  assert.strictEqual(gs[2], 'ENDLESSFUN01');
+  assert.strictEqual(gs[3], '925485US00');
+});
+
 test('a multi-claim batch numbers transactions and reports ambiguous ones', () => {
   const c2 = { ...CLAIM, id: 'x-2', invoice: '46300', newInvoice: '8980001', amount: 19.04 };
   const { edi, transactions, warnings } = buildEdi810(

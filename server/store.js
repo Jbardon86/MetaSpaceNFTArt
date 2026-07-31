@@ -143,13 +143,25 @@ const STAT_HIGH_WATER = 8974211;
 const DEFAULT_NEXT_NEW_INVOICE = 8980000;
 
 function getWalmartConfig() {
-  const saved = readJson('walmart.json', null);
+  const saved = readJson('walmart.json', null) || {};
   return {
     vendorNumber: '540153',
     dept: '92',
     seq: '1',
     nextNewInvoice: DEFAULT_NEXT_NEW_INVOICE, // rolling rebill invoice number for disputes
-    ...(saved || {}),
+    ...saved,
+    // EDI 810 transport identity. senderId is YOUR EDI interchange (ISA) ID from
+    // TrueCommerce — it must be set before a real send (the default is blank, and
+    // it is NOT STAT's 5074121162). receiverId is Walmart's. usage: T=test, P=live.
+    // Nested and merged separately so a saved partial config keeps the defaults.
+    edi: {
+      senderId: '',
+      senderQual: '12',
+      receiverId: '925485US00',
+      receiverQual: '08',
+      usage: 'T',
+      ...(saved.edi || {}),
+    },
   };
 }
 
