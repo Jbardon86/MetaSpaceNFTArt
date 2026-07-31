@@ -187,16 +187,70 @@ function finalize(rows, wb, ws, filename) {
   return { checkNumber, datePaid, rows, sheetName: ws ? ws.name : undefined };
 }
 
+// --- HTML-table remittances ("HTML for Excel") -----------------------------
+// Retail Link's "To Excel" button on the Check Details page serves an HTML
+// <table> saved as .xls (the `urn:schemas-microsoft-com:office:excel` format),
+// NOT a real workbook — exceljs can't read it. We turn its rows into the same
+// matrix the workbook/CSV parsers produce, then reuse the identical header
+// matching + normalization, so the output is byte-identical to the others.
+
+function htmlUnescape(s) {
+  return String(s)
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+}
+
+function htmlTableToMatrix(html) {
+  const tableMatch = html.match(/<table[\s\S]*?<\/table>/i);
+  const scope = tableMatch ? tableMatch[0] : html;
+  const matrix = [];
+  const trRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+  let tr;
+  while ((tr = trRe.exec(scope)) !== null) {
+    const cells = [];
+    const cellRe = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
+    let cell;
+    while ((cell = cellRe.exec(tr[1])) !== null) {
+      cells.push(htmlUnescape(cell[1].replace(/<[^>]+>/g, '')).replace(/ /g, ' ').trim());
+    }
+    if (cells.length) matrix.push(cells);
+  }
+  return matrix;
+}
+
+function parseHtmlTable(buffer, filename) {
+  const text = buffer.toString('utf8').replace(/^﻿/, '');
+  const matrix = htmlTableToMatrix(text);
+  const { rowIndex, colMap } = findHeaderRow(matrix);
+  if (rowIndex === -1) {
+    throw new Error('Could not find the Walmart column headers in the .xls (HTML) file.');
+  }
+  const rows = rowsFromMatrix(matrix, rowIndex, colMap);
+  // the office:excel sheet name carries the check number too, e.g. "Check_003996479.xls"
+  const nameMatch = text.match(/<x:Name>([^<]+)<\/x:Name>/i);
+  const ws = nameMatch ? { name: nameMatch[1] } : null;
+  return finalize(rows, null, ws, filename);
+}
+
 /**
- * Entry point: sniff by filename extension and parse accordingly.
+ * Entry point: pick a parser. CSV by extension; then sniff the content so a
+ * `.xls` that is really an HTML table is routed correctly; otherwise treat it as
+ * a workbook (.xlsx, or the .xls-named files that are xlsx under the hood).
  */
 async function parseRemittance(buffer, filename = '') {
   const lower = filename.toLowerCase();
   if (lower.endsWith('.csv')) {
     return parseCsvText(buffer.toString('utf8'), filename);
   }
-  // default to workbook (covers .xlsx and the .xls-named files Walmart sends,
-  // which are really xlsx under the hood)
+  const head = buffer.slice(0, 1024).toString('utf8').toLowerCase();
+  if (head.includes('<table') || head.includes('<html') || head.includes('urn:schemas-microsoft-com:office:excel')) {
+    return parseHtmlTable(buffer, filename);
+  }
   return parseWorkbook(buffer, filename);
 }
 

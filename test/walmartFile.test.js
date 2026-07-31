@@ -71,6 +71,24 @@ test('parsed xlsx flows through the allocator and balances', async () => {
   assert.ok(!plan.receivePayment.invoices.some((i) => i.invoice === '90003'));
 });
 
+test('an HTML-for-Excel .xls (Retail Link "To Excel") parses the same way', async () => {
+  // Retail Link serves an HTML <table> saved as .xls with padded numbers.
+  const cell = (v) => `<td>${String(v)}</td>`;
+  const trs = [HEADERS, ...DATA.map((r) => r.map((c, i) => (i === 1 ? '00000000' + c : c)))]
+    .map((r) => `<tr>${r.map(cell).join('')}</tr>`)
+    .join('');
+  const html =
+    '﻿<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><xml><x:ExcelWorkbook>' +
+    '<x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Check_003996479.xls</x:Name></x:ExcelWorksheet>' +
+    `</x:ExcelWorksheets></x:ExcelWorkbook></xml></head><body><table>${trs}</table></body></html>`;
+  const parsed = await parseRemittance(Buffer.from(html, 'utf8'), 'Check_003996479.xls');
+  assert.strictEqual(parsed.checkNumber, '003996479');
+  assert.strictEqual(parsed.rows.length, 5);
+  assert.strictEqual(parsed.rows[0].invoice, '90001'); // padding stripped
+  const plan = allocateCheck(parsed.rows, DECODER, {}, {});
+  assert.strictEqual(plan.bankDeposit.total, 232); // identical result to xlsx/csv
+});
+
 test('CSV export of the remittance parses the same way', async () => {
   const csv = [HEADERS.join(',')]
     .concat(DATA.map((r) => r.map((c) => (typeof c === 'string' && c.includes(',') ? `"${c}"` : c)).join(',')))
