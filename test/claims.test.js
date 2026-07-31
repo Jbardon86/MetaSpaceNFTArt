@@ -20,6 +20,28 @@ test('addClaims is idempotent by check/invoice/code', () => {
   assert.strictEqual(claims[0].id, '900-46226-0022');
 });
 
+test('re-ingest self-heals a zero-filled PO/DC without disturbing the rest', () => {
+  // First ingest stored zero-filled identifiers (Walmart's deduction line).
+  store.addClaims([{ checkNumber: '905', invoice: '46218', code: '0022', amount: 942.48, po: '0000000000', whse: '000000000' }]);
+  store.updateClaim('905-46218-0022', { status: 'filed', newInvoice: '8980000' });
+  // Re-ingest now carries the real values from the invoice's payment line.
+  store.addClaims([{ checkNumber: '905', invoice: '46218', code: '0022', amount: 942.48, po: '5501001222', whse: '6017' }]);
+  const claims = store.getClaims().claims.filter((c) => c.checkNumber === '905');
+  assert.strictEqual(claims.length, 1, 'still deduped — no duplicate');
+  assert.strictEqual(claims[0].po, '5501001222');
+  assert.strictEqual(claims[0].whse, '6017');
+  assert.strictEqual(claims[0].status, 'filed', 'status untouched');
+  assert.strictEqual(claims[0].newInvoice, '8980000', 'rebill number untouched');
+});
+
+test('re-ingest never overwrites an already-real PO/DC', () => {
+  store.addClaims([{ checkNumber: '906', invoice: '5', code: '0022', amount: 10, po: '5501001222', whse: '6017' }]);
+  store.addClaims([{ checkNumber: '906', invoice: '5', code: '0022', amount: 10, po: '9999999999', whse: '0000' }]);
+  const claim = store.getClaims().claims.find((c) => c.id === '906-5-0022');
+  assert.strictEqual(claim.po, '5501001222');
+  assert.strictEqual(claim.whse, '6017');
+});
+
 test('updateClaim changes status', () => {
   store.addClaims([{ checkNumber: '901', invoice: '5', code: '0022', amount: 10 }]);
   const updated = store.updateClaim('901-5-0022', { status: 'filed', newInvoice: '8974100' });

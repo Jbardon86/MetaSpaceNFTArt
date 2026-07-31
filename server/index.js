@@ -15,6 +15,7 @@ const denials = require('./denials');
 const { postPlan } = require('./qboPost');
 const edi810 = require('./edi810');
 const apdp = require('./apdpImport');
+const { missingIdentifiers } = require('./claimGuards');
 const { seedSandbox } = require('./seedSandbox');
 
 const app = express();
@@ -502,17 +503,34 @@ app.post(
     // denies it. Split the selection — file the ones with complete docs, hold
     // back the rest and report exactly what each is missing.
     const ready = [];
-    const blocked = [];
+    const blocked = [];  // held back: missing proof documents
+    const badId = [];    // held back: zero/blank PO or DC (Walmart can't match it)
     for (const c of selected) {
       const st = store.claimDocsStatus(c);
-      if (st.complete) ready.push(c);
-      else blocked.push({ id: c.id, invoice: c.invoice, missing: st.missing });
+      if (!st.complete) {
+        blocked.push({ id: c.id, invoice: c.invoice, missing: st.missing });
+        continue;
+      }
+      const idMissing = missingIdentifiers(c);
+      if (idMissing.length) {
+        badId.push({ id: c.id, invoice: c.invoice, missing: idMissing });
+        continue;
+      }
+      ready.push(c);
     }
     if (!ready.length) {
-      const list = blocked.map((b) => `inv ${b.invoice} (needs ${b.missing.join(' + ')})`).join('; ');
+      const parts = [];
+      if (blocked.length)
+        parts.push(
+          `missing documents: ${blocked.map((b) => `inv ${b.invoice} (needs ${b.missing.join(' + ')})`).join('; ')}`
+        );
+      if (badId.length)
+        parts.push(
+          `zero/blank identifier: ${badId.map((b) => `inv ${b.invoice} (needs a real ${b.missing.join(' + ')})`).join('; ')}`
+        );
       throw badRequest(
-        `Nothing filed — every selected claim is missing documents: ${list}. ` +
-          `Mark the proof of delivery and invoice as in-hand on each claim, then export again.`
+        `Nothing filed — every selected claim is blocked (${parts.join('; and ')}). ` +
+          `Fill in each claim's real PO and DC from the original invoice, mark its proof of delivery in-hand, then export again.`
       );
     }
 
@@ -535,8 +553,9 @@ app.post(
     for (const c of ready) {
       ws.addRow([c.po, cfg.vendorNumber, cfg.dept, cfg.seq, c.whse, c.shipDate, c.invoice, c.newInvoice, c.amount]);
     }
-    // Tell the browser which claims were held back for missing documents.
+    // Tell the browser which claims were held back, and why.
     if (blocked.length) res.setHeader('X-Skipped-Missing-Docs', JSON.stringify(blocked));
+    if (badId.length) res.setHeader('X-Skipped-Bad-Identifiers', JSON.stringify(badId));
     const buf = await wb.xlsx.writeBuffer();
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="Recovery_Submission_${cfg.vendorNumber}.xlsx"`);
@@ -558,6 +577,16 @@ app.post(
     // Only submit documented claims (same failsafe as filing).
     const ready = selected.filter((c) => store.claimDocsStatus(c).complete);
     if (!ready.length) throw badRequest('No documented claims to submit. Add each claim\'s proof of delivery first.');
+
+    // A zero/blank PO or DC can't be re-invoiced — the 810 references the
+    // original PO. Block rather than transmit an un-matchable invoice.
+    const badId = ready.filter((c) => missingIdentifiers(c).length);
+    if (badId.length) {
+      throw badRequest(
+        `These claims have a zero/blank PO or DC and can't be submitted — fill in the real value from the ` +
+          `original invoice first: ${badId.map((c) => `inv ${c.invoice} (needs a real ${missingIdentifiers(c).join(' + ')})`).join('; ')}.`
+      );
+    }
 
     // The 810 re-invoices under the rebill "New Inv #". A claim only has one
     // after the Recovery Submission export, so require that first.

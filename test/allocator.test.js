@@ -150,6 +150,50 @@ test('full allocation of check 004041349 ties out to the ACH', () => {
   assert.ok(!plan.receivePayment.invoices.some((i) => i.invoice === '46595'));
 });
 
+// --- PO / DC carry: Walmart zero-fills these on some deduction lines ---------
+
+test('a zero-filled dispute line inherits the real PO/DC from the invoice payment line', () => {
+  const rows = [
+    { po: '5501001222', invoice: '46218', dc: '6017', store: '8011', invoiceAmount: 900, discount: 18, amountPaid: 882, deductionCode: '', invoiceDate: '2026-07-20' },
+    { po: '0000000000', invoice: '46218', dc: '000000000', store: '', invoiceAmount: -75, discount: 0, amountPaid: -75, deductionCode: 'MERCHANDISE BILLED NOT SHIPPED [0022]', invoiceDate: '2026-07-20' },
+  ];
+  const plan = allocateCheck(rows, DECODER, ACCOUNTS, {});
+  const d = plan.disputes.find((x) => x.invoice === '46218');
+  assert.strictEqual(d.po, '5501001222');
+  assert.strictEqual(d.whse, '6017');
+});
+
+test('the carry is order-independent — deduction line can precede the payment line', () => {
+  const rows = [
+    { po: '0000000000', invoice: '46218', dc: '000000000', store: '', invoiceAmount: -75, discount: 0, amountPaid: -75, deductionCode: 'MERCHANDISE BILLED NOT SHIPPED [0022]', invoiceDate: '2026-07-20' },
+    { po: '5501001222', invoice: '46218', dc: '6017', store: '8011', invoiceAmount: 900, discount: 18, amountPaid: 882, deductionCode: '', invoiceDate: '2026-07-20' },
+  ];
+  const plan = allocateCheck(rows, DECODER, ACCOUNTS, {});
+  const d = plan.disputes.find((x) => x.invoice === '46218');
+  assert.strictEqual(d.po, '5501001222');
+  assert.strictEqual(d.whse, '6017');
+});
+
+test('DC falls back to Store Number when the DC column itself is zero-filled', () => {
+  const rows = [
+    { po: '5501001222', invoice: '46218', dc: '000000000', store: '8011', invoiceAmount: 900, discount: 18, amountPaid: 882, deductionCode: '', invoiceDate: '2026-07-20' },
+    { po: '0000000000', invoice: '46218', dc: '000000000', store: '', invoiceAmount: -75, discount: 0, amountPaid: -75, deductionCode: 'MERCHANDISE BILLED NOT SHIPPED [0022]', invoiceDate: '2026-07-20' },
+  ];
+  const plan = allocateCheck(rows, DECODER, ACCOUNTS, {});
+  const d = plan.disputes.find((x) => x.invoice === '46218');
+  assert.strictEqual(d.whse, '8011');
+});
+
+test('a standalone zero-filled chargeback stays blank (never fabricated) so the export guard can catch it', () => {
+  const rows = [
+    { po: '0000000000', invoice: '46595', dc: '000000000', store: '', invoiceAmount: -28.2, discount: 0, amountPaid: -28.2, deductionCode: 'MERCHANDISE BILLED NOT SHIPPED [0022]', invoiceDate: '2026-07-20' },
+  ];
+  const plan = allocateCheck(rows, DECODER, ACCOUNTS, {});
+  const d = plan.disputes.find((x) => x.invoice === '46595');
+  assert.strictEqual(d.po, '');
+  assert.strictEqual(d.whse, '');
+});
+
 test('fee codes route to their mapped expense account (advertising vs compliance)', () => {
   const decoder = {
     ...DECODER,

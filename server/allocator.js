@@ -26,6 +26,8 @@
 // Anything whose code isn't in the decoder comes back as 'unclassified' so the
 // UI can ask the user where it goes (and never silently post it).
 
+const { isBlankOrZero } = require('./claimGuards');
+
 function round2(n) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
@@ -145,7 +147,8 @@ function allocateCheck(rows, decoder, accounts = {}, meta = {}, rebillIndex = {}
     if (!byInvoice.has(invoice)) {
       byInvoice.set(invoice, {
         invoice,
-        po: row.po,
+        po: '',
+        whse: '',
         invoiceAmount: 0,
         discount: 0,
         accepted: 0,
@@ -154,6 +157,15 @@ function allocateCheck(rows, decoder, accounts = {}, meta = {}, rebillIndex = {}
       });
     }
     const g = byInvoice.get(invoice);
+    // Carry the real PO / DC across the invoice's lines. Walmart zero-fills these
+    // on some deduction/chargeback lines ("0000000000" / "000000000"), so keep
+    // the first *real* value seen on ANY line of the invoice (usually the payment
+    // line) and hand it to the dispute lines below. A zero-string is truthy, so
+    // we test it explicitly rather than relying on `||`.
+    if (isBlankOrZero(g.po) && !isBlankOrZero(row.po)) g.po = String(row.po).trim();
+    const rowWhse = !isBlankOrZero(row.dc) ? row.dc : row.store;
+    if (isBlankOrZero(g.whse) && !isBlankOrZero(rowWhse)) g.whse = String(rowWhse).trim();
+
     if (c.category === 'payment') {
       g.hasPayment = true;
       g.invoiceAmount = round2(g.invoiceAmount + (Number(row.invoiceAmount) || 0));
@@ -165,11 +177,23 @@ function allocateCheck(rows, decoder, accounts = {}, meta = {}, rebillIndex = {}
         code: c.code,
         description: c.description,
         amount: round2(Math.abs(row.amountPaid)),
-        // claim fields (for the dispute pipeline / Recovery Submission export)
-        po: row.po || g.po,
-        whse: row.dc || row.store,
+        // claim fields (for the dispute pipeline / Recovery Submission export).
+        // Store the line's own real values here; any still blank/zero are
+        // backfilled from the invoice group after all rows are read, so the fix
+        // works regardless of whether the payment line came before or after.
+        po: !isBlankOrZero(row.po) ? String(row.po).trim() : '',
+        whse: !isBlankOrZero(rowWhse) ? String(rowWhse).trim() : '',
         shipDate: row.invoiceDate,
       });
+    }
+  }
+
+  // Second pass: backfill any dispute line still missing a PO / DC from the real
+  // value carried on its invoice group (order-independent — see above).
+  for (const g of byInvoice.values()) {
+    for (const d of g.disputed) {
+      if (isBlankOrZero(d.po)) d.po = g.po;
+      if (isBlankOrZero(d.whse)) d.whse = g.whse;
     }
   }
 

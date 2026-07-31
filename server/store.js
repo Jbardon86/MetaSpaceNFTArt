@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const defaultDecoder = require('./defaultDecoder');
 const defaultAccounts = require('./defaultAccounts');
+const { isBlankOrZero } = require('./claimGuards');
 
 function round2(n) {
   return Math.round(((Number(n) || 0) + Number.EPSILON) * 100) / 100;
@@ -284,7 +285,16 @@ function addClaims(entries) {
   const byId = new Map(data.claims.map((c) => [c.id, c]));
   for (const e of entries) {
     const id = claimId(e.checkNumber, e.invoice, e.code);
-    if (byId.has(id)) continue;
+    const existing = byId.get(id);
+    if (existing) {
+      // Self-heal: an earlier ingest may have stored a zero-filled PO/DC (Walmart
+      // zero-fills these on some deduction lines). If re-ingesting the same check
+      // now carries a real value, backfill it — only filling blanks, never
+      // overwriting a real value or touching status/amount/docs.
+      if (isBlankOrZero(existing.po) && !isBlankOrZero(e.po)) existing.po = e.po;
+      if (isBlankOrZero(existing.whse) && !isBlankOrZero(e.whse)) existing.whse = e.whse;
+      continue;
+    }
     const claim = { id, status: 'ready', ...e };
     data.claims.push(claim);
     byId.set(id, claim);

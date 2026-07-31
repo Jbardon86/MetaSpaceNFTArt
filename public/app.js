@@ -631,16 +631,21 @@ async function exportClaims() {
   try {
     const res = await fetch('/api/claims/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ids.length ? { ids } : {}) });
     if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Export failed'); }
-    // Claims held back for missing documents (the export files only documented ones).
+    // Claims held back: missing documents, or a zero/blank PO or DC.
     let skipped = [];
+    let badId = [];
     try { skipped = JSON.parse(res.headers.get('X-Skipped-Missing-Docs') || '[]'); } catch (_) { /* none */ }
+    try { badId = JSON.parse(res.headers.get('X-Skipped-Bad-Identifiers') || '[]'); } catch (_) { /* none */ }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = 'Recovery_Submission.xlsx'; a.click();
     URL.revokeObjectURL(url);
-    if (skipped.length) {
-      toast(`Filed the documented claims. Held back ${skipped.length} missing docs: inv ${skipped.map((s) => s.invoice).join(', ')}.`, true);
+    const notes = [];
+    if (skipped.length) notes.push(`${skipped.length} missing docs (inv ${skipped.map((s) => s.invoice).join(', ')})`);
+    if (badId.length) notes.push(`${badId.length} zero PO/DC (inv ${badId.map((s) => s.invoice).join(', ')})`);
+    if (notes.length) {
+      toast(`Filed the submittable claims. Held back ${notes.join('; ')}.`, true);
     } else {
       toast('Exported. Claims marked Filed. File it in Retail Link.');
     }
