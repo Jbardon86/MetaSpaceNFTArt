@@ -597,6 +597,7 @@ async function loadClaims() {
         <td><input type="checkbox" class="clsel" data-id="${esc(c.id)}" ${c.status === 'ready' && ds.complete ? 'checked' : ''}></td>
         <td>${esc(c.invoice)}</td>
         <td class="acct">${esc(c.po || '—')}</td>
+        <td class="acct">${esc(c.salesRep || '—')}</td>
         <td>[${esc(c.code)}]</td>
         <td class="num neg">${amountCell}</td>
         <td class="acct">${esc(c.shipDate || '—')}</td>
@@ -608,7 +609,7 @@ async function loadClaims() {
     }).join('');
     body.innerHTML =
       `<div class="tbl-wrap"><table>
-        <thead><tr><th></th><th>Invoice</th><th>PO</th><th>Code</th><th class="num">Amount</th><th>Ship date</th><th>Docs</th><th>Status</th><th title="Walmart's own ruling, from the APDP import">Walmart</th><th>New Inv #</th></tr></thead>
+        <thead><tr><th></th><th>Invoice</th><th>PO</th><th>Rep</th><th>Code</th><th class="num">Amount</th><th>Ship date</th><th>Docs</th><th>Status</th><th title="Walmart's own ruling, from the APDP import">Walmart</th><th>New Inv #</th></tr></thead>
         <tbody>${rows}</tbody></table></div>`;
     body.querySelectorAll('.clstatus').forEach((sel) =>
       sel.addEventListener('change', async (e) => {

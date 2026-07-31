@@ -382,7 +382,22 @@ function summarizeClaims(claims) {
 app.get(
   '/api/claims',
   wrap(async (req, res) => {
-    const claims = store.getClaims().claims.slice().reverse();
+    const data = store.getClaims();
+
+    // Fill in the sales rep from each claim's QuickBooks invoice, once, then
+    // cache it on the claim (store '' when blank so we don't keep re-querying).
+    const needRep = data.claims.filter((c) => c.salesRep === undefined && c.invoice);
+    if (needRep.length && qbo.isConnected()) {
+      try {
+        const repMap = await qbo.findInvoiceSalesReps(needRep.map((c) => c.invoice));
+        for (const c of needRep) c.salesRep = repMap.get(String(c.invoice)) || '';
+        store.saveClaims(data);
+      } catch (_) {
+        /* best effort — the tab still works without the rep */
+      }
+    }
+
+    const claims = data.claims.slice().reverse();
     // Walmart's own adjudication, derived from the APDP status history. Kept
     // separate from claim.status (our filing pipeline) — see store.js.
     const historyByClaim = store.statusHistoryByClaim();

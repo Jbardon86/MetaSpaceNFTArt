@@ -242,6 +242,27 @@ async function findInvoicesByDocNumbers(docNumbers) {
 }
 
 /**
+ * Look up the "Sales Rep" custom field for many invoices in one batched query.
+ * Returns a Map of DocNumber -> sales rep (string; '' if the field is blank).
+ */
+async function findInvoiceSalesReps(docNumbers) {
+  const unique = [...new Set((docNumbers || []).map((d) => String(d).trim()).filter(Boolean))];
+  const out = new Map();
+  const CHUNK = 30;
+  for (let i = 0; i < unique.length; i += CHUNK) {
+    const batch = unique.slice(i, i + CHUNK);
+    const list = batch.map((d) => `'${d.replace(/'/g, "\\'")}'`).join(',');
+    // SELECT * (not a sparse select) so CustomField reliably comes back.
+    const qr = await query(`SELECT * FROM Invoice WHERE DocNumber IN (${list}) MAXRESULTS 1000`);
+    for (const inv of qr.Invoice || []) {
+      const field = (inv.CustomField || []).find((f) => /sales\s*rep/i.test(f.Name || ''));
+      out.set(String(inv.DocNumber), (field && field.StringValue) || '');
+    }
+  }
+  return out;
+}
+
+/**
  * Fetch an invoice's line items + memo, for building the EDI 810 re-invoice.
  * Returns { lines: [{description, quantity, unitPrice}], privateNote, txnDate }
  * or null. Discount / non-item lines (no unit price) are dropped.
@@ -392,6 +413,7 @@ module.exports = {
   ensureCustomer,
   findInvoiceByDocNumber,
   findInvoicesByDocNumbers,
+  findInvoiceSalesReps,
   getInvoiceForEdi,
   getInvoicePdf,
   buildAccountResolver,
