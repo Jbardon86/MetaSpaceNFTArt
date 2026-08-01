@@ -20,16 +20,23 @@ function round2(n) {
 // Buyer's Item Number (the IT1 "IN" qualifier the 810 needs, which isn't in
 // QBO). Extend as new items get disputed. Matched loosely (case/space-
 // insensitive) since QBO's abbreviations vary slightly.
+// Seeded from STAT's real accepted 810 (each-level: IN = Walmart item #, UP =
+// UPC-12, VN = vendor part #, UK = GTIN-14, unitPrice = per-EA). The 810 bills in
+// eaches at these prices — NOT the case price — so Walmart's item/price match
+// succeeds. Extend as new items get disputed.
 const SEED_ITEM_MASTER = {
-  'MM STRAW CHOCO 4PK': { itemNumber: '554935983', unitPrice: 9.52 },
-  'MM STRAW CKCRM 4PK': { itemNumber: '554935985', unitPrice: 9.52 },
-  'MM STRAW STRWBRY 4PK': { itemNumber: '554935984', unitPrice: 9.52 },
-  'MM STRAWBRRY 24CT': { itemNumber: '650081364', unitPrice: 24.16 },
-  'MM UNICORN 4PK': { itemNumber: '650081361', unitPrice: 9.52 },
-  'MM VARIETY 24PK': { itemNumber: '650044391', unitPrice: 24.16 },
+  'MM STRAW CHOCO 4PK':   { itemNumber: '554935983', unitPrice: 0.68, upc: '803810234951', vendorPart: '4403-23495', gtin: '00803810234951' },
+  'MM STRAW STRWBRY 4PK': { itemNumber: '554935984', unitPrice: 0.68, upc: '803810234968', vendorPart: '4403-23496', gtin: '00803810234968' },
+  'MM STRAW CKCRM 4PK':   { itemNumber: '554935985', unitPrice: 0.68, upc: '803810234975', vendorPart: '4403-23497', gtin: '00803810234975' },
+  'MM VARIETY 24PK':      { itemNumber: '650044391', unitPrice: 3.02, upc: '803810243557', vendorPart: '42523-24356', gtin: '00803810243557' },
+  'MM BIRTHDAY 4PK':      { itemNumber: '650081360', unitPrice: 0.68, upc: '803810235637', vendorPart: '4403-23567', gtin: '00803810235637' },
+  'MM UNICORN 4PK':       { itemNumber: '650081361', unitPrice: 0.68, upc: '803810235620', vendorPart: '4403-23566', gtin: '00803810235620' },
+  'MM VANILLA MILKSHAKE': { itemNumber: '650081362', unitPrice: 0.68, upc: '803810235804', vendorPart: '4403-23574', gtin: '00803810235804' },
+  'MM STRAWBRRY 24CT':    { itemNumber: '650081364', unitPrice: 3.02, upc: '803810232896', vendorPart: '42517-23310', gtin: '00803810232896' },
+  'MM CHOCOLATE 24PK':    { itemNumber: '650081371', unitPrice: 3.02, upc: '803810232889', vendorPart: '42505-23309', gtin: '00803810232889' },
 };
 
-const SUPPLIER = { name: 'Endless Fun LLC' };
+const SUPPLIER = { name: 'Endless Fun, LLC' };
 const SHIP_TO = { name: 'WALMART', addr: '702 SW 8TH ST', city: 'BENTONVILLE', state: 'AR', zip: '72716', country: 'US' };
 
 // EDI constants for this vendor / dept 92. Overridable via config — senderId is
@@ -42,9 +49,7 @@ const EDI_DEFAULTS = {
   senderQual: '12',
   receiverId: '925485US00', // Walmart
   receiverQual: '08',
-  refIA: '540153921',
-  refDP: '00092',
-  refMR: '0033',
+  refIA: '540153920', // vendor ref, matched to STAT's accepted 810
   usage: 'P', // P = production, T = test (route defaults this to T)
 };
 
@@ -65,6 +70,10 @@ function normDesc(d) {
 }
 function price3(p) {
   return (Number(p) || 0).toFixed(3);
+}
+// IT1 unit price — 2 decimals, matching STAT's accepted 810 (e.g. 0.68, 3.02).
+function money2(p) {
+  return (Number(p) || 0).toFixed(2);
 }
 function upcFromMemo(memo) {
   const m = String(memo || '').match(/\b(\d{12,14})\b/);
@@ -101,6 +110,9 @@ function resolveLineItems(claim, invoiceLines, master) {
       quantity: Number(it.quantity) || 0,
       unitPrice: round2(it.unitPrice != null ? it.unitPrice : found && found.unitPrice),
       itemNumber: it.itemNumber || (found && found.itemNumber) || '',
+      upc: it.upc || (found && found.upc) || '',
+      vendorPart: it.vendorPart || (found && found.vendorPart) || '',
+      gtin: it.gtin || (found && found.gtin) || '',
     };
   };
 
@@ -144,19 +156,24 @@ function buildTransaction(input, stCtrl, config, master) {
   // BIG: rebill invoice date, rebill number, PO date, PO number
   seg.push(`BIG*${ymd(input.invoiceDate)}*${claim.newInvoice || ''}*${ymd(input.poDate || claim.shipDate)}*${claim.po || ''}`);
   seg.push(`REF*IA*${cfg.refIA}`);
-  seg.push(`REF*DP*${cfg.refDP}`);
-  seg.push(`REF*MR*${cfg.refMR}`);
   seg.push(`N1*SU*${SUPPLIER.name}`);
   seg.push(`N1*ST*${SHIP_TO.name}${input.locationUpc ? `*UL*${input.locationUpc}` : ''}`);
   seg.push(`N3*${SHIP_TO.addr}`);
   seg.push(`N4*${SHIP_TO.city}*${SHIP_TO.state}*${SHIP_TO.zip}*${SHIP_TO.country}`);
-  seg.push('ITD*05*3*****4');
+  seg.push('ITD*08**2**30**45'); // 2% 30, net 45 — matched to STAT's accepted 810
   if (shipDate) seg.push(`DTM*011*${shipDate}`);
   seg.push('FOB*PP');
   let qtyTotal = 0;
+  let lineNo = 0;
   for (const l of lines) {
+    lineNo += 1;
     qtyTotal += l.quantity;
-    seg.push(`IT1**${l.quantity}*EA*${price3(l.unitPrice)}${l.itemNumber ? `**IN*${l.itemNumber}` : ''}`);
+    // IT1*<line>*<qty>*EA*<each price>**IN*<item#>*UP*<UPC>***VN*<vendor part>*UK*<GTIN>
+    let it1 = `IT1*${lineNo}*${l.quantity}*EA*${money2(l.unitPrice)}`;
+    if (l.itemNumber) it1 += `**IN*${l.itemNumber}`;
+    if (l.upc) it1 += `*UP*${l.upc}`;
+    if (l.gtin || l.vendorPart) it1 += `***VN*${l.vendorPart || ''}*UK*${l.gtin || ''}`;
+    seg.push(it1);
     seg.push(`PID*F****${l.description}`);
   }
   seg.push(`TDS*${cents(total)}`);
@@ -202,7 +219,7 @@ function buildEdi810(items, opts = {}) {
   const isa =
     `ISA*00*${' '.repeat(10)}*00*${' '.repeat(10)}` +
     `*${padRight(cfg.senderQual, 2)}*${padRight(cfg.senderId, 15)}*${padRight(cfg.receiverQual, 2)}*${padRight(cfg.receiverId, 15)}` +
-    `*${yymmdd}*${hhmm}*:*00501*${ctrl}*0*${cfg.usage}*>`;
+    `*${yymmdd}*${hhmm}*:*00501*${ctrl}*0*${cfg.usage}*:`;
   const gs = `GS*IN*${cfg.senderId}*${cfg.receiverId}*${ccyymmdd}*${hhmm}*${Number(ctrl)}*X*005010`;
   const ge = `GE*${transactions.length}*${Number(ctrl)}`;
   const iea = `IEA*1*${ctrl}`;

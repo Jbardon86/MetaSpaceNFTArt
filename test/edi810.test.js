@@ -75,9 +75,13 @@ test('buildEdi810 produces a valid, balanced X12 810 interchange', () => {
   assert.strictEqual(big[2], '8980000'); // rebill invoice number
   assert.strictEqual(big[4], '9034794755'); // original PO
 
-  // The line resolves to the Walmart item number, and TDS is the amount in cents.
-  assert.ok(segs.some((s) => s === 'IT1**1*EA*9.520**IN*554935983'));
+  // The line resolves to the Walmart item number + UPC/vendor-part/GTIN, with a
+  // sequential line number and 2-decimal each price (matched to the accepted 810).
+  assert.ok(segs.some((s) => s === 'IT1*1*1*EA*9.52**IN*554935983*UP*803810234951***VN*4403-23495*UK*00803810234951'));
   assert.ok(segs.some((s) => s === 'PID*F****MM STRAW CHOCO 4PK'));
+  // No stray REF*DP / REF*MR — the accepted 810 carries only REF*IA.
+  assert.ok(!segs.some((s) => s.startsWith('REF*DP') || s.startsWith('REF*MR')));
+  assert.ok(segs.some((s) => s === 'REF*IA*540153920'));
   assert.ok(segs.some((s) => s === 'TDS*952')); // $9.52
   assert.ok(segs.some((s) => s === 'CTT*1'));
 
