@@ -660,16 +660,12 @@ app.post(
 
     const cfg = store.getWalmartConfig();
     const ediCfg = cfg.edi || {};
-    // Guard the transport identity: the 810 must go out under the vendor's own
-    // EDI mailbox, never STAT's, and never to production before it's been set.
+    // Guard the transport identity: require the sender ID to be set before we
+    // build a file. (5074121162 is Endless Fun's own ID, provided to STAT, so
+    // it's a valid value — not blocked.)
     if (!ediCfg.senderId) {
       throw badRequest(
-        'Set your EDI Sender ID (your TrueCommerce interchange ID) in Settings before generating an 810.'
-      );
-    }
-    if (ediCfg.senderId === edi810.STAT_SENDER_ID) {
-      throw badRequest(
-        `Sender ID ${edi810.STAT_SENDER_ID} is STAT's, not yours — set your own EDI Sender ID in Settings before sending.`
+        'Set your EDI Sender ID (your EDI interchange ID) in Settings before generating an 810.'
       );
     }
     const control = String(Date.now()).slice(-9);

@@ -212,9 +212,6 @@ function buildEdi810(items, opts = {}) {
   return { edi, transactions, warnings };
 }
 
-// STAT's interchange sender ID — the app must never transmit under it.
-const STAT_SENDER_ID = '5074121162';
-
 module.exports = {
   buildEdi810,
   buildTransaction,
@@ -223,5 +220,4 @@ module.exports = {
   upcFromMemo,
   SEED_ITEM_MASTER,
   EDI_DEFAULTS,
-  STAT_SENDER_ID,
 };

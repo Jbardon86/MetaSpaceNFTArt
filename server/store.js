@@ -150,10 +150,10 @@ function getWalmartConfig() {
     seq: '1',
     nextNewInvoice: DEFAULT_NEXT_NEW_INVOICE, // rolling rebill invoice number for disputes
     ...saved,
-    // EDI 810 transport identity. senderId is YOUR EDI interchange (ISA) ID from
-    // TrueCommerce — it must be set before a real send (the default is blank, and
-    // it is NOT STAT's 5074121162). receiverId is Walmart's. usage: T=test, P=live.
-    // Nested and merged separately so a saved partial config keeps the defaults.
+    // EDI 810 transport identity. senderId is YOUR EDI interchange (ISA) ID (for
+    // Endless Fun, 5074121162 — the ID provided to STAT) — must be set before a
+    // send; default blank so it's entered deliberately. receiverId is Walmart's.
+    // usage: T=test, P=live. Merged separately so a saved partial keeps defaults.
     edi: {
       senderId: '',
       senderQual: '12',

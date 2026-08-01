@@ -709,7 +709,7 @@ async function loadSettings() {
          Send a <b>Test</b> file and confirm TrueCommerce/Walmart accept it before switching to Production.</div>`
       : '';
     const ediFields = [
-      ['senderId', 'EDI Sender ID', 'Your own EDI mailbox / interchange (ISA) ID from TrueCommerce. Required to generate an 810 — and it must NOT be STAT\'s (5074121162).'],
+      ['senderId', 'EDI Sender ID', 'Your EDI interchange (ISA) sender ID — the ID your account transmits under (for Endless Fun, the 5074121162 you provided to STAT). Required to generate an 810.'],
       ['senderQual', 'Sender qualifier', 'The ISA qualifier for your sender ID (TrueCommerce tells you — commonly 12 or ZZ).'],
       ['receiverId', 'Walmart receiver ID', 'Walmart\'s interchange ID. Default 925485US00.'],
       ['receiverQual', 'Receiver qualifier', 'Qualifier for the receiver ID. Default 08 for Walmart.'],
