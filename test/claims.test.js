@@ -34,6 +34,27 @@ test('re-ingest self-heals a zero-filled PO/DC without disturbing the rest', () 
   assert.strictEqual(claims[0].newInvoice, '8980000', 'rebill number untouched');
 });
 
+test('backfillIdentifiers fills blank PO/DC from an authoritative source', () => {
+  store.addClaims([{ checkNumber: '907', invoice: '46218', code: '0025', amount: 942.48, po: '0000000000', whse: '000000000' }]);
+  const changed = store.backfillIdentifiers([{ claimId: '907-46218-0025', po: '28-7087-0016', whse: '7087' }]);
+  assert.strictEqual(changed, 1);
+  const claim = store.getClaims().claims.find((c) => c.id === '907-46218-0025');
+  assert.strictEqual(claim.po, '28-7087-0016');
+  assert.strictEqual(claim.whse, '7087');
+});
+
+test('backfillIdentifiers never overwrites a real value and ignores unknown claims', () => {
+  store.addClaims([{ checkNumber: '908', invoice: '5', code: '0022', amount: 10, po: '5501001222', whse: '6017' }]);
+  const changed = store.backfillIdentifiers([
+    { claimId: '908-5-0022', po: '9999999999', whse: '0000' }, // must not overwrite
+    { claimId: 'does-not-exist', po: '1', whse: '2' }, // ignored
+  ]);
+  assert.strictEqual(changed, 0);
+  const claim = store.getClaims().claims.find((c) => c.id === '908-5-0022');
+  assert.strictEqual(claim.po, '5501001222');
+  assert.strictEqual(claim.whse, '6017');
+});
+
 test('re-ingest never overwrites an already-real PO/DC', () => {
   store.addClaims([{ checkNumber: '906', invoice: '5', code: '0022', amount: 10, po: '5501001222', whse: '6017' }]);
   store.addClaims([{ checkNumber: '906', invoice: '5', code: '0022', amount: 10, po: '9999999999', whse: '0000' }]);

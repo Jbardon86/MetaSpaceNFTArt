@@ -15,7 +15,7 @@ const denials = require('./denials');
 const { postPlan } = require('./qboPost');
 const edi810 = require('./edi810');
 const apdp = require('./apdpImport');
-const { missingIdentifiers } = require('./claimGuards');
+const { missingIdentifiers, isBlankOrZero, decodeDsdRep } = require('./claimGuards');
 const { seedSandbox } = require('./seedSandbox');
 
 const app = express();
@@ -403,15 +403,27 @@ app.get(
     // Fill in the sales rep from each claim's QuickBooks invoice, once, then
     // cache it on the claim (store '' when blank so we don't keep re-querying).
     const needRep = data.claims.filter((c) => c.salesRep === undefined && c.invoice);
+    let claimsChanged = false;
     if (needRep.length && qbo.isConnected()) {
       try {
         const repMap = await qbo.findInvoiceSalesReps(needRep.map((c) => c.invoice));
         for (const c of needRep) c.salesRep = repMap.get(String(c.invoice)) || '';
-        store.saveClaims(data);
+        claimsChanged = true;
       } catch (_) {
         /* best effort — the tab still works without the rep */
       }
     }
+    // Backfill PO/DC on store-direct (DSD) claims from the Sales Rep location
+    // code (28-<store>-<seq>): the whole code is the PO, the store is the DC.
+    // Walmart zero-fills these on the remittance; QBO carries the real value.
+    // Fills blanks only — never overwrites a real PO/DC.
+    for (const c of data.claims) {
+      const dsd = decodeDsdRep(c.salesRep);
+      if (!dsd) continue;
+      if (isBlankOrZero(c.po)) { c.po = dsd.po; claimsChanged = true; }
+      if (isBlankOrZero(c.whse)) { c.whse = dsd.whse; claimsChanged = true; }
+    }
+    if (claimsChanged) store.saveClaims(data);
 
     const claims = data.claims.slice().reverse();
     // Walmart's own adjudication, derived from the APDP status history. Kept
@@ -477,6 +489,16 @@ app.post(
       preview.matched.map((m) => ({ claimId: m.claimId, disputeNbr: m.disputeNbr, caseNbr: m.caseNbr }))
     );
 
+    // Backfill PO/DC from the dispute export's PoNbr/LocationNbr — always
+    // populated, even when the check remittance zero-filled them. Blanks only.
+    const rowByDispute = new Map(stash.rows.map((r) => [r.disputeNbr, r]));
+    const identifiersBackfilled = store.backfillIdentifiers(
+      preview.matched.map((m) => {
+        const row = rowByDispute.get(m.disputeNbr);
+        return { claimId: m.claimId, po: row && row.po, whse: row && row.locationNbr };
+      })
+    );
+
     store.recordImportBatch({
       batchId: stash.batchId,
       fileName: stash.fileName,
@@ -489,7 +511,7 @@ app.post(
     });
 
     delete req.session.apdp;
-    res.json({ ok: true, batchId: stash.batchId, appended, skipped, idsRecorded, summary: preview.summary });
+    res.json({ ok: true, batchId: stash.batchId, appended, skipped, idsRecorded, identifiersBackfilled, summary: preview.summary });
   })
 );
 

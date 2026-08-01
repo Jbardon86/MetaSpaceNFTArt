@@ -513,7 +513,9 @@ async function confirmApdpImport() {
     toast(`Recorded ${res.appended} status ${res.appended === 1 ? 'entry' : 'entries'}.`);
     $('apdpPreview').innerHTML = `<div class="note">Recorded <b>${res.appended}</b> status
       ${res.appended === 1 ? 'entry' : 'entries'}${res.skipped ? `, skipped ${res.skipped} unchanged` : ''}.
-      Walmart's identifiers were saved on ${res.idsRecorded} claim(s) for faster matching next time.</div>`;
+      Walmart's identifiers were saved on ${res.idsRecorded} claim(s) for faster matching next time.${
+        res.identifiersBackfilled ? ` Filled in a real PO/DC on <b>${res.identifiersBackfilled}</b> claim(s) that were missing one.` : ''
+      }</div>`;
     hide('apdpActions');
   } catch (err) {
     toast(err.message, true);

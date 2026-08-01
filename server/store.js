@@ -315,6 +315,30 @@ function addClaims(entries) {
   return data;
 }
 
+/**
+ * Backfill PO / DC on existing claims from an authoritative source (e.g. the
+ * APDP dispute export's PoNbr / LocationNbr, which are always populated even
+ * when the check remittance zero-filled them). Fills blanks/zeros only — never
+ * overwrites a real value, never touches status/amount/docs.
+ * @param updates [{ claimId, po, whse }]
+ * @returns number of claims changed
+ */
+function backfillIdentifiers(updates) {
+  const data = getClaims();
+  const byId = new Map(data.claims.map((c) => [c.id, c]));
+  let changed = 0;
+  for (const u of updates || []) {
+    const c = byId.get(u && u.claimId);
+    if (!c) continue;
+    let hit = false;
+    if (isBlankOrZero(c.po) && !isBlankOrZero(u.po)) { c.po = String(u.po).trim(); hit = true; }
+    if (isBlankOrZero(c.whse) && !isBlankOrZero(u.whse)) { c.whse = String(u.whse).trim(); hit = true; }
+    if (hit) changed += 1;
+  }
+  if (changed) saveClaims(data);
+  return changed;
+}
+
 function updateClaim(id, patch) {
   const data = getClaims();
   const claim = data.claims.find((c) => c.id === id);
@@ -536,6 +560,7 @@ module.exports = {
   deleteClaimDoc,
   saveClaims,
   addClaims,
+  backfillIdentifiers,
   updateClaim,
   matchRepayments,
   getStatusHistory,
