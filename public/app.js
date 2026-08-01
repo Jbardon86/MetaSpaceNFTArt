@@ -589,13 +589,16 @@ async function loadClaims() {
         : `<button class="btn tiny" data-act="upload-pod" data-id="${id}">Upload</button>
            <button class="btn tiny ghost" data-act="linkform-pod" data-id="${id}">Link</button>
            <input type="file" class="pod-file" data-id="${id}" hidden accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff">`;
-      const podNote = isPod
-        ? `<div class="docline"><span class="pill" title="POD / No Merchandise Received — won with a proof of delivery filed in Retail Link, not an EDI 810 re-invoice. Attach the POD, file in Retail Link, then set status to Filed.">POD → file in Retail Link</span></div>`
-        : '';
+      // Tell the user exactly where each dispute must be entered.
+      const channel = isPod
+        ? ['Retail Link (POD)', 'POD / No Merchandise Received — file a document dispute WITH the proof of delivery in Retail Link (APDP). Not an EDI 810. Then set status to Filed; recovery comes back on the original invoice.']
+        : ['TrueCommerce (EDI 810)', 'Shortage / re-invoice — Export Recovery Submission to assign a rebill number, Generate the EDI 810, and transmit it through TrueCommerce. Recovery comes back on the rebill number.'];
+      const channelNote = `<div class="docline"><span class="doclabel">File via</span> <span class="pill ${isPod ? 'pod' : 'edi'}" title="${esc(channel[1])}">${esc(channel[0])}</span></div>`;
       const docsCell = done
         ? '<span class="acct">—</span>'
         : `<div class="docs">
-             <span class="pill ${ds.complete ? 'ok' : 'warn'}">${ds.complete ? 'Docs ready' : 'Needs BOL'}</span>${podNote}
+             <span class="pill ${ds.complete ? 'ok' : 'warn'}">${ds.complete ? 'Docs ready' : 'Needs BOL'}</span>
+             ${channelNote}
              <div class="docline"><span class="doclabel">BOL</span> ${podControls}</div>
              <div class="docline podlink hidden"><input type="url" class="pod-linkinput" placeholder="paste BOL/POD link"><button class="btn tiny" data-act="save-podlink" data-id="${id}">Save</button></div>
              <div class="docline"><span class="doclabel">Invoice</span> <a href="/api/claims/${idEnc}/invoice-pdf" target="_blank" rel="noopener">from QuickBooks</a></div>

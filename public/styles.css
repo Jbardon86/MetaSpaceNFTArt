@@ -191,6 +191,9 @@ tr.total td.num { font-size: 15px; }
 .pill.dispute, .pill.bad { background: var(--critical-bg); color: var(--critical); }
 .pill.ok { background: var(--good-bg); color: var(--good); }
 .pill.warn { background: var(--warn-bg); color: var(--warn); }
+/* Dispute destination badges: where each claim must be filed. */
+.pill.edi { background: var(--accent-bg); color: var(--accent); }
+.pill.pod { background: var(--warn-bg); color: var(--warn); }
 
 /* ---- Per-claim documents (filing failsafe) ---- */
 .docs { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
