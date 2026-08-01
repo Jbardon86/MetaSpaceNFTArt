@@ -532,6 +532,12 @@ function setNav(view) {
   $('navSettings').classList.toggle('active', view === 'settings');
 }
 
+// POD / No-Merchandise (0025) claims are document disputes filed in Retail Link,
+// never re-invoiced — kept out of the Recovery Submission / EDI 810 rebill path.
+function isPodClaim(code) {
+  return String(code == null ? '' : code).replace(/\D/g, '').replace(/^0+/, '') === '25';
+}
+
 const CLAIM_STATUSES = [
   ['ready', 'Ready to file'],
   ['filed', 'Filed'],
@@ -575,6 +581,7 @@ async function loadClaims() {
       const ds = c.docsStatus || { complete: false };
       const id = esc(c.id);
       const idEnc = encodeURIComponent(c.id);
+      const isPod = isPodClaim(c.code);
       const pod = c.docs && c.docs.pod;
       const podControls = pod && pod.have
         ? `<a href="/api/claims/${idEnc}/doc/pod" target="_blank" rel="noopener">${pod.kind === 'link' ? 'view link' : esc(pod.filename || 'file')}</a>
@@ -582,10 +589,13 @@ async function loadClaims() {
         : `<button class="btn tiny" data-act="upload-pod" data-id="${id}">Upload</button>
            <button class="btn tiny ghost" data-act="linkform-pod" data-id="${id}">Link</button>
            <input type="file" class="pod-file" data-id="${id}" hidden accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff">`;
+      const podNote = isPod
+        ? `<div class="docline"><span class="pill" title="POD / No Merchandise Received — won with a proof of delivery filed in Retail Link, not an EDI 810 re-invoice. Attach the POD, file in Retail Link, then set status to Filed.">POD → file in Retail Link</span></div>`
+        : '';
       const docsCell = done
         ? '<span class="acct">—</span>'
         : `<div class="docs">
-             <span class="pill ${ds.complete ? 'ok' : 'warn'}">${ds.complete ? 'Docs ready' : 'Needs BOL'}</span>
+             <span class="pill ${ds.complete ? 'ok' : 'warn'}">${ds.complete ? 'Docs ready' : 'Needs BOL'}</span>${podNote}
              <div class="docline"><span class="doclabel">BOL</span> ${podControls}</div>
              <div class="docline podlink hidden"><input type="url" class="pod-linkinput" placeholder="paste BOL/POD link"><button class="btn tiny" data-act="save-podlink" data-id="${id}">Save</button></div>
              <div class="docline"><span class="doclabel">Invoice</span> <a href="/api/claims/${idEnc}/invoice-pdf" target="_blank" rel="noopener">from QuickBooks</a></div>
@@ -596,7 +606,7 @@ async function loadClaims() {
              }</div>
            </div>`;
       return `<tr class="${done ? 'muted' : ''}">
-        <td><input type="checkbox" class="clsel" data-id="${esc(c.id)}" ${c.status === 'ready' && ds.complete ? 'checked' : ''}></td>
+        <td><input type="checkbox" class="clsel" data-id="${esc(c.id)}" ${c.status === 'ready' && ds.complete && !isPod ? 'checked' : ''}></td>
         <td>${esc(c.invoice)}</td>
         <td class="acct">${esc(c.po || '—')}</td>
         <td class="acct">${esc(c.salesRep || '—')}</td>
@@ -636,8 +646,10 @@ async function exportClaims() {
     // Claims held back: missing documents, or a zero/blank PO or DC.
     let skipped = [];
     let badId = [];
+    let pod = [];
     try { skipped = JSON.parse(res.headers.get('X-Skipped-Missing-Docs') || '[]'); } catch (_) { /* none */ }
     try { badId = JSON.parse(res.headers.get('X-Skipped-Bad-Identifiers') || '[]'); } catch (_) { /* none */ }
+    try { pod = JSON.parse(res.headers.get('X-Skipped-Pod') || '[]'); } catch (_) { /* none */ }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -646,6 +658,7 @@ async function exportClaims() {
     const notes = [];
     if (skipped.length) notes.push(`${skipped.length} missing docs (inv ${skipped.map((s) => s.invoice).join(', ')})`);
     if (badId.length) notes.push(`${badId.length} zero PO/DC (inv ${badId.map((s) => s.invoice).join(', ')})`);
+    if (pod.length) notes.push(`${pod.length} POD/0025 → file in Retail Link (inv ${pod.map((s) => s.invoice).join(', ')})`);
     if (notes.length) {
       toast(`Filed the submittable claims. Held back ${notes.join('; ')}.`, true);
     } else {

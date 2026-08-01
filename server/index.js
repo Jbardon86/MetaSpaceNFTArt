@@ -15,7 +15,7 @@ const denials = require('./denials');
 const { postPlan } = require('./qboPost');
 const edi810 = require('./edi810');
 const apdp = require('./apdpImport');
-const { missingIdentifiers, isBlankOrZero, decodeDsdRep } = require('./claimGuards');
+const { missingIdentifiers, isBlankOrZero, decodeDsdRep, isPodCode } = require('./claimGuards');
 const { seedSandbox } = require('./seedSandbox');
 
 const app = express();
@@ -542,7 +542,15 @@ app.post(
     const ready = [];
     const blocked = [];  // held back: missing proof documents
     const badId = [];    // held back: zero/blank PO or DC (Walmart can't match it)
+    const pod = [];      // held back: POD/0025 — files in Retail Link, not a rebill
     for (const c of selected) {
+      // POD / No-Merchandise (0025) claims are document disputes filed in Retail
+      // Link, not re-invoiced — keep them out of the Recovery Submission entirely
+      // so they never consume a rebill number.
+      if (isPodCode(c.code)) {
+        pod.push({ id: c.id, invoice: c.invoice });
+        continue;
+      }
       const st = store.claimDocsStatus(c);
       if (!st.complete) {
         blocked.push({ id: c.id, invoice: c.invoice, missing: st.missing });
@@ -564,6 +572,12 @@ app.post(
       if (badId.length)
         parts.push(
           `zero/blank identifier: ${badId.map((b) => `inv ${b.invoice} (needs a real ${b.missing.join(' + ')})`).join('; ')}`
+        );
+      if (pod.length)
+        parts.push(
+          `POD/No-Merchandise (0025) — file these in Retail Link, not the Recovery Submission: ${pod
+            .map((b) => `inv ${b.invoice}`)
+            .join(', ')}`
         );
       throw badRequest(
         `Nothing filed — every selected claim is blocked (${parts.join('; and ')}). ` +
@@ -593,6 +607,7 @@ app.post(
     // Tell the browser which claims were held back, and why.
     if (blocked.length) res.setHeader('X-Skipped-Missing-Docs', JSON.stringify(blocked));
     if (badId.length) res.setHeader('X-Skipped-Bad-Identifiers', JSON.stringify(badId));
+    if (pod.length) res.setHeader('X-Skipped-Pod', JSON.stringify(pod));
     const buf = await wb.xlsx.writeBuffer();
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="Recovery_Submission_${cfg.vendorNumber}.xlsx"`);
@@ -611,9 +626,22 @@ app.post(
       ids ? ids.has(c.id) : !['recovered', 'denied', 'writeoff'].includes(c.status)
     );
 
+    // POD / No-Merchandise (0025) claims are document disputes filed in Retail
+    // Link — they are never re-invoiced via an 810. Keep them out.
+    const podSelected = selected.filter((c) => isPodCode(c.code));
+    const notPod = selected.filter((c) => !isPodCode(c.code));
+
     // Only submit documented claims (same failsafe as filing).
-    const ready = selected.filter((c) => store.claimDocsStatus(c).complete);
-    if (!ready.length) throw badRequest('No documented claims to submit. Add each claim\'s proof of delivery first.');
+    const ready = notPod.filter((c) => store.claimDocsStatus(c).complete);
+    if (!ready.length) {
+      if (podSelected.length && podSelected.length === selected.length) {
+        throw badRequest(
+          `POD / No-Merchandise (0025) claims file as a document dispute in Retail Link, not via EDI 810 — ` +
+            `nothing to generate for: ${podSelected.map((c) => `inv ${c.invoice}`).join(', ')}.`
+        );
+      }
+      throw badRequest("No documented claims to submit. Add each claim's proof of delivery first.");
+    }
 
     // A zero/blank PO or DC can't be re-invoiced — the 810 references the
     // original PO. Block rather than transmit an un-matchable invoice.
@@ -684,6 +712,7 @@ app.post(
 
     // URI-encode so any non-ASCII in a warning can't produce an invalid header.
     if (warnings.length) res.setHeader('X-Edi-Warnings', encodeURIComponent(JSON.stringify(warnings)));
+    if (podSelected.length) res.setHeader('X-Skipped-Pod', JSON.stringify(podSelected.map((c) => ({ id: c.id, invoice: c.invoice }))));
     res.setHeader('X-Edi-Usage', ediCfg.usage || 'T');
     res.setHeader('Content-Type', 'application/edi-x12');
     const tag = ediCfg.usage === 'P' ? 'PROD' : 'TEST';

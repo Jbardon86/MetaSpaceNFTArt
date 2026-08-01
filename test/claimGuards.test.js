@@ -2,7 +2,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { isBlankOrZero, missingIdentifiers, decodeDsdRep } = require('../server/claimGuards');
+const { isBlankOrZero, missingIdentifiers, decodeDsdRep, isPodCode } = require('../server/claimGuards');
 
 test('isBlankOrZero flags empty and all-zero identifiers', () => {
   for (const v of ['', '   ', '0', '00', '0000000000', '000000000', null, undefined]) {
@@ -56,4 +56,9 @@ test('decodeDsdRep returns null for non-DSD values (real POs, blanks)', () => {
   for (const v of ['3034891822', '', null, undefined, 'not a rep', '92-7087-01']) {
     assert.strictEqual(decodeDsdRep(v), null, `should be null: ${JSON.stringify(v)}`);
   }
+});
+
+test('isPodCode recognizes 0025 in any form and rejects re-invoice codes', () => {
+  for (const v of ['0025', '25', '[0025]']) assert.strictEqual(isPodCode(v), true, `POD: ${v}`);
+  for (const v of ['0022', '22', '0021', '0100', '', null]) assert.strictEqual(isPodCode(v), false, `not POD: ${v}`);
 });

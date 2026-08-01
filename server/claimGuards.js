@@ -24,13 +24,17 @@ function bareCode(v) {
 // against a PO. For these a blank PO is expected, not an error — but the DC
 // (store/warehouse) is still required, since that's how the POD is located.
 // Extend as other document-based (non-re-invoice) codes surface.
-const NO_PO_CODES = new Set([
+const POD_CODES = new Set([
   '25', // 0025 POD / No Merchandise Received For Invoice
 ]);
 
-/** True when this claim's deduction code is a document dispute that needs no PO. */
-function isNoPoCode(code) {
-  return NO_PO_CODES.has(bareCode(code));
+/**
+ * True when this claim's deduction code is a POD / document dispute — won with a
+ * proof of delivery filed in Retail Link, NOT by re-invoicing. Such claims need
+ * no PO and must be kept out of the EDI 810 / Recovery Submission rebill path.
+ */
+function isPodCode(code) {
+  return POD_CODES.has(bareCode(code));
 }
 
 // A Walmart store-direct (DSD) invoice's "PO" is the location code
@@ -49,9 +53,9 @@ function decodeDsdRep(rep) {
 /** Which required identifiers a claim is missing ([] => submittable). */
 function missingIdentifiers(c) {
   const missing = [];
-  if (!isNoPoCode(c.code) && isBlankOrZero(c.po)) missing.push('PO');
+  if (!isPodCode(c.code) && isBlankOrZero(c.po)) missing.push('PO');
   if (isBlankOrZero(c.whse)) missing.push('DC/Whse');
   return missing;
 }
 
-module.exports = { isBlankOrZero, missingIdentifiers, isNoPoCode, NO_PO_CODES, decodeDsdRep };
+module.exports = { isBlankOrZero, missingIdentifiers, isPodCode, POD_CODES, decodeDsdRep };
