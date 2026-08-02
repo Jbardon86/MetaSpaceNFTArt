@@ -195,6 +195,17 @@ tr.total td.num { font-size: 15px; }
 .pill.edi { background: var(--accent-bg); color: var(--accent); }
 .pill.pod { background: var(--warn-bg); color: var(--warn); }
 
+/* Status bar: pipeline buckets over the disputes list. */
+.statusbar { display: flex; gap: 8px; flex-wrap: wrap; margin: 2px 0 18px; }
+.chip { display: inline-flex; align-items: center; gap: 7px; padding: 7px 14px; border-radius: 980px;
+  border: 1px solid var(--hairline); background: var(--chip); color: var(--text-2);
+  font-size: 13px; font-weight: 600; cursor: pointer; transition: background .15s ease, color .15s ease; }
+.chip:hover { background: var(--chip-hover); }
+.chip.active { background: var(--accent); color: #fff; border-color: transparent; }
+.chip-n { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 18px;
+  padding: 0 6px; border-radius: 980px; font-size: 11px; background: rgba(0,0,0,.08); color: inherit; }
+.chip.active .chip-n { background: rgba(255,255,255,.25); }
+
 /* ---- Per-claim documents (filing failsafe) ---- */
 .docs { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
 .docline { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); white-space: nowrap; }

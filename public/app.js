@@ -548,6 +548,22 @@ const CLAIM_STATUSES = [
   ['writeoff', 'Written off'],
 ];
 
+// Pipeline buckets for the status bar. Default view is "To file" so filed and
+// closed claims move out of the active work list and it stays clean. `null`
+// statuses = every claim.
+const CLAIM_BUCKETS = [
+  ['tofile', 'To file', ['ready']],
+  ['filed', 'Filed', ['filed', 'research', 'partial']],
+  ['recovered', 'Recovered', ['recovered']],
+  ['denied', 'Denied', ['denied']],
+  ['all', 'All', null],
+];
+let claimFilter = 'tofile';
+function bucketStatuses(key) {
+  const b = CLAIM_BUCKETS.find((x) => x[0] === key);
+  return b ? b[2] : null;
+}
+
 function showDisputes() {
   setNav('disputes');
   document.querySelectorAll('main > .step').forEach((s) => s.classList.add('hidden'));
@@ -571,7 +587,25 @@ async function loadClaims() {
       body.innerHTML = '<p class="sub">No disputes yet. They show up here automatically when you post a check that has disputable deductions.</p>';
       return;
     }
-    const rows = claims.map((c) => {
+    // Status bar: bucket the pipeline and show only the active bucket, so filed /
+    // recovered / denied claims move out of the "to file" work list.
+    const counts = {};
+    for (const [key, , statuses] of CLAIM_BUCKETS) {
+      counts[key] = statuses ? claims.filter((c) => statuses.includes(c.status)).length : claims.length;
+    }
+    const statusBar = `<div class="statusbar">${CLAIM_BUCKETS.map(
+      ([key, label]) =>
+        `<button class="chip ${key === claimFilter ? 'active' : ''}" data-bucket="${key}">${label}<span class="chip-n">${counts[key]}</span></button>`
+    ).join('')}</div>`;
+    const activeStatuses = bucketStatuses(claimFilter);
+    const shown = activeStatuses ? claims.filter((c) => activeStatuses.includes(c.status)) : claims;
+    if (!shown.length) {
+      body.innerHTML = statusBar + `<p class="sub">Nothing in <b>${esc((CLAIM_BUCKETS.find((b) => b[0] === claimFilter) || [])[1] || '')}</b>. Pick another bucket above.</p>`;
+      body.querySelectorAll('[data-bucket]').forEach((btn) =>
+        btn.addEventListener('click', () => { claimFilter = btn.dataset.bucket; loadClaims(); }));
+      return;
+    }
+    const rows = shown.map((c) => {
       const opts = CLAIM_STATUSES.map(([v, l]) => `<option value="${v}" ${c.status === v ? 'selected' : ''}>${l}</option>`).join('');
       const done = ['recovered', 'denied', 'writeoff'].includes(c.status);
       const rec = Number(c.recoveredAmount) || 0;
@@ -623,9 +657,12 @@ async function loadClaims() {
       </tr>`;
     }).join('');
     body.innerHTML =
+      statusBar +
       `<div class="tbl-wrap"><table>
         <thead><tr><th></th><th>Invoice</th><th>PO</th><th>Rep</th><th>Code</th><th class="num">Amount</th><th>Ship date</th><th>Docs</th><th>Status</th><th title="Walmart's own ruling, from the APDP import">Walmart</th><th>New Inv #</th></tr></thead>
         <tbody>${rows}</tbody></table></div>`;
+    body.querySelectorAll('[data-bucket]').forEach((btn) =>
+      btn.addEventListener('click', () => { claimFilter = btn.dataset.bucket; loadClaims(); }));
     body.querySelectorAll('.clstatus').forEach((sel) =>
       sel.addEventListener('change', async (e) => {
         try { await api(`/api/claims/${encodeURIComponent(e.target.dataset.id)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: e.target.value }) }); loadClaims(); }
