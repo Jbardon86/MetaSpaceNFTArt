@@ -167,6 +167,43 @@ test('postPlan flags a missing invoice instead of failing', async () => {
   };
   const report = await postPlan(plan(), deps, { dryRun: true });
   assert.ok(report.warnings.some((w) => /46367 not found/.test(w)));
+  assert.deepStrictEqual(report.missingInvoices, ['46367']); // listed for the reviewer
+});
+
+test('postPlan (real post) REFUSES when an invoice is missing and creates nothing', async () => {
+  let created = 0;
+  const accountIds = { 'Undeposited Funds': '90', 'American National': '35', 'Disputed AR': '80', 'Merchant Deposit Fees': '81' };
+  const deps = {
+    // 46367 missing → its Walmart invoice isn't in QuickBooks yet.
+    findInvoiceId: async (doc) => (doc === '46364' ? { id: '101', customerId: '42', balance: 756.04 } : null),
+    accountIdFor: (label) => accountIds[label] || null,
+    ensureCustomerId: async () => '7',
+    createPayment: async () => { created++; return { Id: 'pay' }; },
+    createDeposit: async () => { created++; return { Id: 'dep' }; },
+  };
+  await assert.rejects(() => postPlan(plan(), deps, { dryRun: false }), /aren't in QuickBooks/);
+  assert.strictEqual(created, 0, 'must not create a payment or deposit when a line is missing');
+});
+
+test('postPlan (real post) REFUSES to book an out-of-balance deposit and creates nothing', async () => {
+  let created = 0;
+  // Deposit math (100) deliberately does not equal the remittance net (999).
+  const imbalanced = {
+    meta: { checkNumber: '900', datePaid: '2026-06-23' },
+    unclassified: [],
+    receivePayment: { invoices: [{ invoice: '46364', appliedToUndepositedFunds: 100, writeOff: 0 }], depositToAccount: 'Undeposited Funds' },
+    bankDeposit: { lines: [], depositToAccount: 'American National' },
+    reconciliation: { remittanceNet: 999 },
+  };
+  const deps = {
+    findInvoiceId: async () => ({ id: '101', customerId: '42', balance: 100 }),
+    accountIdFor: (label) => ({ 'Undeposited Funds': '90', 'American National': '35' }[label] || null),
+    ensureCustomerId: async () => '7',
+    createPayment: async () => { created++; return { Id: 'pay' }; },
+    createDeposit: async () => { created++; return { Id: 'dep' }; },
+  };
+  await assert.rejects(() => postPlan(imbalanced, deps, { dryRun: false }), /does not equal the remittance net/);
+  assert.strictEqual(created, 0, 'must not create anything when the deposit is out of balance');
 });
 
 test('postPlan refuses to post when codes are unclassified', async () => {

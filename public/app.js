@@ -148,6 +148,15 @@ function render(data) {
   } else if (data.review && data.review.warnings && data.review.warnings.length) {
     notes += data.review.warnings.map((w) => `<div class="banner warn">${esc(w)}</div>`).join('');
   }
+  // Pre-post checklist: any remittance line with no Walmart invoice in QBO. The
+  // post is hard-blocked until every one is created (or the number fixed).
+  const missing = (r && r.missingInvoices) || [];
+  if (missing.length) {
+    notes =
+      `<div class="banner warn"><b>${missing.length} invoice${missing.length === 1 ? '' : 's'} not in QuickBooks —</b> ` +
+      `create ${missing.length === 1 ? 'it' : 'them'} under Walmart Corporate (or fix the number), then re-check. ` +
+      `Posting is blocked until every line matches:<br><b>${missing.map(esc).join(', ')}</b></div>` + notes;
+  }
   rw.innerHTML = notes;
 
   // A check is "already recorded" if the app posted it (its ledger) OR its
@@ -164,10 +173,11 @@ function render(data) {
   }
 
   // buttons
-  const canPost = state.connected && unclassified.length === 0 && r.balanced && !alreadyRecorded;
+  const canPost = state.connected && unclassified.length === 0 && r.balanced && missing.length === 0 && !alreadyRecorded;
   $('postBtn').disabled = !canPost;
   $('postHint').textContent = !state.connected ? 'Connect QuickBooks first'
     : unclassified.length ? 'Classify the new codes first'
+    : missing.length ? `${missing.length} invoice${missing.length === 1 ? '' : 's'} not in QuickBooks — create them first`
     : !r.balanced ? 'Does not balance — not safe to post'
     : canBackfill ? 'Already in QuickBooks — you can still track its disputes (nothing is posted)'
     : alreadyInQBO && !data.alreadyPosted ? 'Already in QuickBooks — posting would double-book it'

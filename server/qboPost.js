@@ -165,10 +165,12 @@ async function postPlan(plan, deps, opts = {}) {
   // customer so the payment is applied as that customer (findInvoiceId may
   // return an object {id, customerId} or, in older/test fakes, a bare id).
   const resolvedInvoices = [];
+  const missingInvoices = [];
   let invoiceCustomer = null;
   for (const inv of plan.receivePayment.invoices) {
     const found = await deps.findInvoiceId(inv.invoice);
     if (!found) {
+      missingInvoices.push(inv.invoice);
       report.warnings.push(`Invoice ${inv.invoice} not found in QuickBooks — it will be skipped.`);
       continue;
     }
@@ -183,6 +185,21 @@ async function postPlan(plan, deps, opts = {}) {
       writeOff: round2(inv.writeOff),
       balance: typeof found === 'object' ? found.balance : undefined,
     });
+  }
+  report.missingInvoices = missingInvoices;
+
+  // Hard guard: never post a check we can't fully apply. A remittance line with
+  // no matching Walmart invoice would otherwise be silently skipped, posting a
+  // payment + deposit that leaves those invoices open and the deposit off. Refuse
+  // the real post; the dry-run still lists them (report.missingInvoices) so the
+  // reviewer sees exactly what to create first.
+  if (!dryRun && missingInvoices.length) {
+    const e = new Error(
+      `Won't post check ${checkNumber} — ${missingInvoices.length} invoice(s) aren't in QuickBooks: ${missingInvoices.join(', ')}. ` +
+        `Create them under Walmart Corporate (or fix the numbers), then post. Nothing was posted.`
+    );
+    e.status = 422;
+    throw e;
   }
 
   // Double-book guard: if every invoice this check would pay is ALREADY paid in
@@ -233,6 +250,28 @@ async function postPlan(plan, deps, opts = {}) {
     if (dryRun) bankId = `UNRESOLVED:${plan.bankDeposit.depositToAccount}`;
   }
 
+  // Work out the deposit math FIRST — no QuickBooks writes yet — so the balance
+  // guard can stop a bad post before anything is created.
+  const undepositedTotal = round2(resolvedInvoices.reduce((s, i) => s + i.cash, 0));
+  const adjustments = resolveDepositAdjustments(plan, deps.accountIdFor, { lenient: dryRun, warnings: report.warnings });
+  const expectedDepositTotal = round2(undepositedTotal + adjustments.reduce((s, a) => s + round2(a.amount), 0));
+  report.balanced = expectedDepositTotal === plan.reconciliation.remittanceNet;
+
+  // Hard guard: the deposit must tie to the penny against the remittance net. If
+  // it doesn't (a skipped line, an unresolved adjustment account, a rounding
+  // issue), refuse the real post rather than booking an out-of-balance deposit
+  // that leaves the books wrong. Dry-run just warns so the reviewer sees it.
+  if (!report.balanced) {
+    const off = round2(expectedDepositTotal - plan.reconciliation.remittanceNet);
+    const msg = `Deposit ${expectedDepositTotal} does not equal the remittance net ${plan.reconciliation.remittanceNet} (off by ${off}).`;
+    if (!dryRun) {
+      const e = new Error(`Won't post check ${checkNumber} — ${msg} Nothing was posted.`);
+      e.status = 422;
+      throw e;
+    }
+    report.warnings.push(msg);
+  }
+
   // 1. Payment — invoices paid in full into Undeposited Funds (no credit memos;
   // discounts + accepted deductions are booked on the deposit instead).
   const paymentPayload = buildPayment({
@@ -253,14 +292,13 @@ async function postPlan(plan, deps, opts = {}) {
 
   // 2. Deposit — sweep the full Undeposited Funds payment, then the adjustment
   // lines (write-off, disputes, fees, repayments) net it down to the ACH.
-  const adjustments = resolveDepositAdjustments(plan, deps.accountIdFor, { lenient: dryRun, warnings: report.warnings });
   const deposit = buildDeposit({
     bankId,
     txnDate,
     checkNumber,
     paymentId,
     entityId: customerId,
-    undepositedTotal: round2(resolvedInvoices.reduce((s, i) => s + i.cash, 0)),
+    undepositedTotal,
     adjustments,
   });
   report.payloads.deposit = deposit.payload;
@@ -282,14 +320,6 @@ async function postPlan(plan, deps, opts = {}) {
       }
       throw depErr;
     }
-  }
-
-  // Reconciliation guard.
-  report.balanced = deposit.total === plan.reconciliation.remittanceNet;
-  if (!report.balanced) {
-    report.warnings.push(
-      `Deposit total ${deposit.total} does not equal remittance net ${plan.reconciliation.remittanceNet}.`
-    );
   }
 
   return report;
