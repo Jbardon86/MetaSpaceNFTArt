@@ -816,10 +816,71 @@ async function loadSettings() {
       <div class="actions">
         <button class="btn primary" id="saveSettingsBtn">Save</button>
         <span class="hint" id="settingsHint"></span>
-      </div>`;
+      </div>
+      <h3 class="set-h">Deduction code routing</h3>
+      <p class="set-hint">Where each Walmart deduction code posts. Change one to re-route it — e.g. an
+        advertising billing that's landing in Disputed AR should be <b>Fee — Advertising (Marketing #60120)</b>.
+        Takes effect on the next check you analyze (already-posted checks must be fixed in QuickBooks).</p>
+      <div id="codeRouting"><p class="sub">Loading…</p></div>`;
     $('saveSettingsBtn').addEventListener('click', saveSettings);
+    loadCodeRouting();
   } catch (err) {
     body.innerHTML = `<div class="banner warn">${esc(err.message)}</div>`;
+  }
+}
+
+// --- deduction code routing editor -----------------------------------------
+const CODE_CAT_OPTIONS = [
+  ['accept', 'Accept — write off on payment'],
+  ['dispute', 'Dispute — Disputed AR (recoverable)'],
+  ['fee:advertising', 'Fee — Advertising (Marketing #60120)'],
+  ['fee:compliance', 'Fee — Compliance (#42500)'],
+];
+const FEE_DESC = { advertising: 'Advertising Billing', compliance: 'Compliance Charge' };
+
+function codeCatValue(entry) {
+  return entry.category === 'fee' ? `fee:${entry.feeAccount || 'default'}` : entry.category;
+}
+
+async function loadCodeRouting() {
+  const box = $('codeRouting');
+  if (!box) return;
+  try {
+    const { decoder } = await api('/api/config/decoder');
+    const codes = Object.keys(decoder).sort();
+    box.innerHTML = codes.map((code) => {
+      const cur = codeCatValue(decoder[code]);
+      const opts = CODE_CAT_OPTIONS.map(([v, l]) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${l}</option>`).join('');
+      return `<div class="set-row" data-code="${esc(code)}">
+        <label>[${esc(code)}]</label>
+        <div>
+          <select class="code-cat" data-code="${esc(code)}">${opts}</select>
+          <span class="set-hint">${esc(decoder[code].description || '')}</span>
+        </div>
+      </div>`;
+    }).join('');
+    box.querySelectorAll('.code-cat').forEach((sel) => sel.addEventListener('change', saveCodeRouting));
+  } catch (err) {
+    box.innerHTML = `<div class="banner warn">${esc(err.message)}</div>`;
+  }
+}
+
+async function saveCodeRouting(e) {
+  const code = e.target.dataset.code;
+  const val = e.target.value;
+  let entry;
+  if (val.startsWith('fee:')) {
+    const fa = val.split(':')[1];
+    entry = { description: FEE_DESC[fa] || `Walmart ${fa} fee`, category: 'fee', feeAccount: fa };
+  } else {
+    entry = { description: `Code ${code}`, category: val };
+  }
+  try {
+    await api('/api/config/decoder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, entry }) });
+    toast(`Re-routed code ${code} → ${CODE_CAT_OPTIONS.find(([v]) => v === val)[1]}.`);
+    loadCodeRouting();
+  } catch (err) {
+    toast(err.message, true);
   }
 }
 

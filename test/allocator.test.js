@@ -216,6 +216,22 @@ test('fee codes route to their mapped expense account (advertising vs compliance
   assert.strictEqual(plan.bankDeposit.total, 575.0);
 });
 
+test('advertising billing (0761/0782) posts to Marketing, never Disputed AR', () => {
+  const defaultDecoder = require('../server/defaultDecoder');
+  const defaultAccounts = require('../server/defaultAccounts');
+  const rows = [
+    { po: '1', invoice: '5000', invoiceAmount: 1000, discount: 0, amountPaid: 1000, deductionCode: '' },
+    { po: '', invoice: '700057599111027', invoiceAmount: -8410.5, discount: 0, amountPaid: -8410.5, deductionCode: 'ADVERTISING BILLING [0761]' },
+  ];
+  const plan = allocateCheck(rows, defaultDecoder, defaultAccounts, { checkNumber: 'X' });
+  const feeLine = plan.bankDeposit.lines.find((l) => l.code === '0761');
+  assert.ok(feeLine, 'advertising billing produced a deposit line');
+  assert.strictEqual(feeLine.type, 'fee');
+  assert.strictEqual(feeLine.account, 'Marketing'); // #60120 — not Disputed AR
+  assert.strictEqual(feeLine.amount, -8410.5);
+  assert.ok(!plan.disputes.some((d) => d.code === '0761'), 'advertising is not a dispute');
+});
+
 test('repayments increase the deposit and clear Disputed AR', () => {
   const rowsWithRepay = ROWS.concat([
     { po: '111', invoice: '46000', invoiceAmount: 0, discount: 0, amountPaid: 50.0, deductionCode: 'MERCHANDISE BILLED NOT SHIPPED [0022]' },

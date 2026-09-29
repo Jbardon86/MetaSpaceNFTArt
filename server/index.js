@@ -271,6 +271,10 @@ app.post('/api/config/accounts', wrap(async (req, res) => {
   res.json({ ok: true, accounts: store.getAccounts() });
 }));
 
+app.get('/api/config/decoder', wrap(async (req, res) => {
+  res.json({ decoder: store.getDecoder() });
+}));
+
 app.post('/api/config/decoder', wrap(async (req, res) => {
   const { code, entry } = req.body || {};
   if (!code || !entry || !entry.category) throw badRequest('code and entry.category are required');
