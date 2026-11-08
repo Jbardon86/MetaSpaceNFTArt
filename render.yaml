@@ -6,7 +6,7 @@ services:
     name: endlessfun-orders-backend
     runtime: node
     plan: free
-    branch: claude/tradeshow-order-app-889w6d
+    branch: main
     rootDir: server
     buildCommand: npm install
     startCommand: npm start
@@ -69,7 +69,7 @@ services:
   - type: web
     name: endlessfun-orders-web
     runtime: static
-    branch: claude/tradeshow-order-app-889w6d
+    branch: main
     rootDir: tradeshow-app
     buildCommand: npm install && npx expo export --platform web
     staticPublishPath: dist
