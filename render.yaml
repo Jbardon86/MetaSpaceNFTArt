@@ -1,0 +1,79 @@
+# Render.com blueprint — one-click deploy of the Endless Fun Orders backend.
+# In Render: New → Blueprint → connect this repo → it reads this file.
+# Then set the secret env vars (marked sync:false) in the Render dashboard.
+services:
+  - type: web
+    name: endlessfun-orders-backend
+    runtime: node
+    plan: free
+    branch: claude/tradeshow-order-app-889w6d
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      # SOS Inventory (shared catalog)
+      # Business-card scanning (AI vision)
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SOS_BASE_URL
+        value: https://api.sosinventory.com
+      - key: SOS_CLIENT_ID
+        sync: false
+      - key: SOS_CLIENT_SECRET
+        sync: false
+      - key: SOS_ACCESS_TOKEN
+        sync: false
+      - key: SOS_REFRESH_TOKEN
+        sync: false
+      # Microsoft 365 email (order confirmations from order@endlessfun.biz)
+      - key: SMTP_HOST
+        value: smtp.office365.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        value: order@endlessfun.biz
+      - key: SMTP_PASS
+        sync: false
+      - key: MAIL_FROM
+        value: Endless Fun <order@endlessfun.biz>
+      # Salesforce (Lead + Opportunity per order) — Connected App, Client
+      # Credentials flow. Leave blank to disable. TEST IN THE SANDBOX FIRST:
+      # set SF_LOGIN_URL to https://test.salesforce.com for the sandbox.
+      - key: SF_LOGIN_URL
+        sync: false
+      - key: SF_CLIENT_ID
+        sync: false
+      - key: SF_CLIENT_SECRET
+        sync: false
+      - key: SF_API_VERSION
+        value: v62.0
+      - key: SF_LEAD_SOURCE
+        value: Trade Show
+      - key: SF_OPP_STAGE
+        value: Proposal
+      - key: SF_CREATE_OPPORTUNITY
+        value: "1"
+      - key: SF_ADD_LINE_ITEMS
+        value: "1"
+      - key: SF_LINK_ACCOUNT
+        value: "1"
+      - key: SF_CREATE_ACCOUNT
+        value: "1"
+      # Booth fallback rep (SOS rep id) for kiosk orders that name no rep. Blank
+      # = leave the Opportunity's Sales Rep unassigned for Jeff to set.
+      - key: SF_DEFAULT_REP_SOS_ID
+        sync: false
+
+  # Hosted web version of the app — a shareable link anyone can open in a browser.
+  - type: web
+    name: endlessfun-orders-web
+    runtime: static
+    branch: claude/tradeshow-order-app-889w6d
+    rootDir: tradeshow-app
+    buildCommand: npm install && npx expo export --platform web
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

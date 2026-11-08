@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "Endless Fun Orders",
+    "slug": "tradeshow-app",
+    "owner": "jbardon86",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/app-icon.png",
+    "userInterfaceStyle": "light",
+    "runtimeVersion": { "policy": "appVersion" },
+    "updates": {
+      "url": "https://u.expo.dev/76077277-710e-4598-895d-c89d2324c4d0"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "76077277-710e-4598-895d-c89d2324c4d0"
+      }
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.jbardon86.tradeshowapp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.jbardon86.tradeshowapp",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos to add product images.",
+          "cameraPermission": "Allow $(PRODUCT_NAME) to use the camera to scan business cards."
+        }
+      ]
+    ]
+  }
+}
