@@ -54,6 +54,16 @@ services:
         value: Proposal
       - key: SF_CREATE_OPPORTUNITY
         value: "1"
+      - key: SF_ADD_LINE_ITEMS
+        value: "1"
+      - key: SF_LINK_ACCOUNT
+        value: "1"
+      - key: SF_CREATE_ACCOUNT
+        value: "1"
+      # Booth fallback rep (SOS rep id) for kiosk orders that name no rep. Blank
+      # = leave the Opportunity's Sales Rep unassigned for Jeff to set.
+      - key: SF_DEFAULT_REP_SOS_ID
+        sync: false
 
   # Hosted web version of the app — a shareable link anyone can open in a browser.
   - type: web

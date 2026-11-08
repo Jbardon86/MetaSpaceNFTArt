@@ -37,7 +37,46 @@ const {
   SF_CREATE_OPPORTUNITY = '1',
   SF_ADD_LINE_ITEMS = '1',
   SF_PRICEBOOK_ID = '', // optional override; otherwise the Standard Price Book is auto-detected
+  SF_LINK_ACCOUNT = '1', // match/create the Account and link it to the Opportunity
+  SF_CREATE_ACCOUNT = '1', // create a new Account when no match is found (needs a company name)
+  SF_DEFAULT_REP_SOS_ID = '', // booth fallback rep (SOS rep id, e.g. "5" = House) when the order names no rep
+  SF_REP_MAP = '', // optional JSON overriding/extending the name -> SOS rep id map
 } = process.env;
+
+// Rep name -> SOS rep id (SOS_Sales_Rep__c is the numeric SOS rep id, as a
+// string). Seeded from the Endless Fun roster; override/extend via SF_REP_MAP.
+const REP_DEFAULTS = {
+  'andy briggs': '1',
+  'chris roseen': '2',
+  'dave ehrlich': '3',
+  'david ehrlich': '3',
+  'dave & jess': '4',
+  house: '5',
+  'jeff bardon': '6',
+  'jessica tollefson': '8',
+  'jessica tollefson 2': '9',
+  'mason rapp': '10',
+  'obadiah patterson': '11',
+  'roger corazzo': '13',
+  'jackie resch': '14',
+};
+function normalizeName(s) {
+  return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+let repMap = null;
+function getRepMap() {
+  if (repMap) return repMap;
+  repMap = { ...REP_DEFAULTS };
+  if (SF_REP_MAP) {
+    try {
+      const extra = JSON.parse(SF_REP_MAP);
+      for (const [k, v] of Object.entries(extra)) repMap[normalizeName(k)] = String(v);
+    } catch (err) {
+      console.error('SF_REP_MAP is not valid JSON; ignoring:', err.message);
+    }
+  }
+  return repMap;
+}
 
 function isConfigured() {
   return Boolean(SF_LOGIN_URL && SF_CLIENT_ID && SF_CLIENT_SECRET);
@@ -189,6 +228,43 @@ async function resolveLineEntries(lines, pbId) {
   return { bySos, bySku };
 }
 
+// Resolve the rep's SOS id for SOS_Sales_Rep__c. Precedence: explicit id on the
+// order, then the name map, then the configured booth default. The kiosk sets
+// repName to the device name ("Booth Kiosk"), which won't map — that's fine; it
+// falls through to SF_DEFAULT_REP_SOS_ID (or blank = unassigned).
+function resolveRepSosId(order) {
+  if (order.repSosId) return String(order.repSosId);
+  const mapped = getRepMap()[normalizeName(order.repName)];
+  if (mapped) return mapped;
+  return SF_DEFAULT_REP_SOS_ID || null;
+}
+
+// Find (or optionally create) the Account and return its Id, or null. Matches
+// first by SOS customer id, then by exact name. Only creates when a company
+// name is present, to avoid junk "Trade Show Customer" accounts.
+async function resolveAccountId(order) {
+  if (SF_LINK_ACCOUNT !== '1') return null;
+  const sosCustId = order.account?.salesforceId ? String(order.account.salesforceId) : '';
+  const name = (order.account?.name || '').trim();
+
+  if (sosCustId) {
+    const rows = await query(
+      `SELECT Id FROM Account WHERE SOS_Customer_Id__c = '${soql(sosCustId)}' LIMIT 1`
+    );
+    if (rows.length) return rows[0].Id;
+  }
+  if (name) {
+    const rows = await query(`SELECT Id FROM Account WHERE Name = '${soql(name)}' LIMIT 1`);
+    if (rows.length) return rows[0].Id;
+  }
+  if (SF_CREATE_ACCOUNT === '1' && name) {
+    const fields = { Name: name };
+    if (sosCustId) fields.SOS_Customer_Id__c = sosCustId;
+    return createSObject('Account', fields, { 'Sforce-Duplicate-Rule-Header': 'allowSave=true' });
+  }
+  return null;
+}
+
 // --- public API ------------------------------------------------------------
 
 async function createLead(order) {
@@ -249,13 +325,34 @@ async function createOpportunity(order) {
   if (pbId) fields.Pricebook2Id = pbId;
   // Without line items we still want a meaningful Amount on the header.
   if (!pbId) fields.Amount = orderTotal(order);
+
+  // Account link (match or create) and rep attribution — both non-fatal.
+  const attribErrors = [];
+  let accountId = null;
+  try {
+    accountId = await resolveAccountId(order);
+    if (accountId) fields.AccountId = accountId;
+  } catch (err) {
+    console.error('Account resolve/create failed:', err);
+    attribErrors.push(`account: ${err.message || err}`);
+  }
+  const repSosId = resolveRepSosId(order);
+  if (repSosId) fields.SOS_Sales_Rep__c = repSosId;
+
   Object.keys(fields).forEach((k) => fields[k] === undefined && delete fields[k]);
 
   const oppId = await createSObject('Opportunity', fields, {
     'Sforce-Duplicate-Rule-Header': 'allowSave=true',
   });
 
-  const result = { id: oppId, lineItemsCreated: 0, unmatched: [], lineErrors: [] };
+  const result = {
+    id: oppId,
+    accountId,
+    repSosId,
+    lineItemsCreated: 0,
+    unmatched: [],
+    lineErrors: attribErrors,
+  };
   if (!pbId) return result; // header-only fallback
 
   let maps;
@@ -298,6 +395,8 @@ async function pushOrder(order) {
     configured: isConfigured(),
     leadId: null,
     opportunityId: null,
+    accountId: null,
+    repSosId: null,
     lineItemsCreated: 0,
     unmatched: [],
     errors: [],
@@ -315,6 +414,8 @@ async function pushOrder(order) {
     try {
       const opp = await createOpportunity(order);
       result.opportunityId = opp.id;
+      result.accountId = opp.accountId;
+      result.repSosId = opp.repSosId;
       result.lineItemsCreated = opp.lineItemsCreated;
       result.unmatched = opp.unmatched;
       if (opp.lineErrors.length) result.errors.push(...opp.lineErrors.map((e) => `line: ${e}`));

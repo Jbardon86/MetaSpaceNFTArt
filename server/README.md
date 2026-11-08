@@ -123,11 +123,29 @@ the Description, `Amount` = total). The Opportunity is kept in an **open** stage
 (`Proposal`) on purpose, so it does **not** auto-fire your approval /
 Send-to-SOS flow — a human moves it forward in Salesforce as usual.
 
+### Account link + rep attribution (implemented, verified against the sandbox)
+Each order's Opportunity is linked to an **Account** and attributed to a **rep**:
+- **Account match/create.** Matched first by **`SOS_Customer_Id__c`** (the SOS
+  customer id the app carries for known customers), then by exact **Name**. If
+  nothing matches and a company name is present, a new Account is created (with
+  `SOS_Customer_Id__c` when known). Turn off with `SF_LINK_ACCOUNT=0`, or keep
+  matching but never create with `SF_CREATE_ACCOUNT=0`.
+- **Rep attribution.** `SOS_Sales_Rep__c` is set to the **SOS rep id** (a number
+  like `2`). Resolution order: an explicit `repSosId` on the order → a name→id
+  map seeded from your roster (Chris Roseen→2, David Ehrlich→3, Jessica
+  Tollefson→8, Roger Corazzo→13, Jeff→6, House→5, …) → `SF_DEFAULT_REP_SOS_ID`.
+  The kiosk sets `repName` to the device name, which won't map — so set
+  `SF_DEFAULT_REP_SOS_ID` to whoever is working the booth, or leave it blank to
+  let Jeff assign. Extend the map with `SF_REP_MAP` (JSON).
+
+The `POST /api/orders` response's `salesforce` object now also returns
+`accountId` and `repSosId`.
+
+> Tip: to attribute booth orders to the actual rep on duty, the cleanest next
+> step is a small rep picker in the app's admin area that sends `repSosId` on
+> the order — then you don't rely on the env default.
+
 ### Still open (next, if you want it)
-- **Account/Contact link + rep attribution.** The order currently creates a
-  standalone Lead + Opportunity. We can match/create the Account (by
-  `SOS_Customer_Id__c` or name) and set `SOS_Sales_Rep__c` from the rep so it
-  lands in the right rep's pipeline.
 - **Auto-advance to Send-to-SOS.** Today a person approves/advances the
   Opportunity. If you want kiosk orders to flow to SOS automatically, we set the
   stage/flag your `SosOrderService` watches (needs your Apex source to match the
