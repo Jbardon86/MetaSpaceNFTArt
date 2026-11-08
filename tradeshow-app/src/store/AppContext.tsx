@@ -11,14 +11,17 @@ import { Customer, Order, Product, Session } from '../types';
 import { newId } from './id';
 import * as db from './db';
 import { MockSalesforceAdapter } from '../salesforce/adapter';
+import { RestSalesforceAdapter } from '../salesforce/restAdapter';
 import { brand } from '../brand';
 import { fetchRemoteCatalog } from '../catalog/remote';
-import { usesRemoteCatalog } from '../config';
-// Phase 2: import { RestSalesforceAdapter } from '../salesforce/restAdapter';
+import { BACKEND_URL, usesRemoteCatalog } from '../config';
 
-// Swap this line to go live in Phase 2:
-//   const adapter = new RestSalesforceAdapter(BACKEND_URL, getToken);
-const adapter = new MockSalesforceAdapter(/* failureRate */ 0);
+// Live when a backend is configured: orders POST to the backend, which sends
+// the confirmation email and creates the Salesforce Lead + Opportunity. With no
+// backend we fall back to the offline mock so the app stays clickable.
+const adapter = BACKEND_URL
+  ? new RestSalesforceAdapter(BACKEND_URL)
+  : new MockSalesforceAdapter(/* failureRate */ 0);
 
 interface AppState {
   loading: boolean;

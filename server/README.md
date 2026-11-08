@@ -32,9 +32,11 @@ Two options:
      order@endlessfun.biz. (Ask and we'll wire this variant.)
 
 ## Connect the app to this backend
-In the app's `src/salesforce/restAdapter.ts`, set `BACKEND_URL` to this
-server's public URL, then switch the adapter in `src/store/AppContext.tsx`
-from `MockSalesforceAdapter` to `RestSalesforceAdapter`.
+Set `BACKEND_URL` in the app's `src/config.ts` to this server's public URL.
+The app automatically uses the live `RestSalesforceAdapter` whenever
+`BACKEND_URL` is set (and falls back to the offline mock when it's empty) —
+no code change needed. Orders then `POST /api/orders`, which sends the
+confirmation email and creates the Salesforce Lead + Opportunity.
 
 ## Hosting (Render — easiest)
 There's a `render.yaml` blueprint at the repo root for one-click deploy:
@@ -68,7 +70,49 @@ Setup:
 > must be verified against a real SOS `/items` response, especially the image
 > field. We lock this in once we can call the live API.
 
-## Phase 2 — Salesforce
-Add `jsforce`, authenticate with a Salesforce Connected App, and in
-`POST /api/orders` create the Account/Contact + Order/OrderItem, returning the
-real Salesforce Order Id instead of the `TODO` placeholder.
+## Salesforce — Lead + Opportunity per order
+Each order creates a **Lead** (contact capture) and an **Opportunity** (the
+order itself) in Salesforce. This runs server-to-server — the Connected App's
+secret never touches the app. **Test against your SANDBOX first.**
+
+### 1. Create a Connected App (do this in the sandbox first)
+In Salesforce **Setup → App Manager → New Connected App** (or New External
+Client App):
+1. Name it e.g. `Endless Fun Trade-Show App`.
+2. Enable **OAuth Settings**. Callback URL can be `http://localhost/callback`
+   (unused by the Client Credentials flow). Selected OAuth scopes: **Manage
+   user data via APIs (api)** and **Perform requests at any time
+   (refresh_token, offline_access)**.
+3. Enable **Client Credentials Flow** and set a **Run As** user (a user with
+   permission to create Leads and Opportunities — e.g. an integration user, or
+   `order@endlessfun.biz` for testing).
+4. Save, then open **Manage Consumer Details** to copy the **Consumer Key** and
+   **Consumer Secret**.
+
+> Tip: under the Connected App's policies, set IP relaxation / "Relax IP
+> restrictions" if your host (Render) isn't on a trusted IP range.
+
+### 2. Add the secrets to this backend (Render → Environment)
+Never paste these into a chat — enter them in Render (or your `.env` locally):
+- `SF_LOGIN_URL` = `https://test.salesforce.com` (sandbox) or
+  `https://login.salesforce.com` (production), or your My Domain URL.
+- `SF_CLIENT_ID` = Consumer Key
+- `SF_CLIENT_SECRET` = Consumer Secret
+- (optional) `SF_OPP_STAGE`, `SF_LEAD_SOURCE`, `SF_CREATE_OPPORTUNITY`
+
+### 3. Test
+Place an order in the app → check Salesforce for a new Lead **and** a new
+Opportunity (named `<customer> — Trade Show #XXXXXX`). The API response from
+`POST /api/orders` includes a `salesforce` object with `leadId`,
+`opportunityId`, and any `errors`.
+
+### Phase 2b (follow-up) — real line items that feed Send-to-SOS
+The current Opportunity captures the line items in its **Description** and sets
+**Amount** to the order total; it's kept in an **open** stage so it does *not*
+auto-fire the approval / Send-to-SOS flow during testing. To make the order
+flow all the way into SOS, we upgrade it to real **OpportunityLineItems** — by
+matching each app product (its SOS item id) to the Salesforce Product2
+(`SOS_Item_Id__c`) → PricebookEntry — or by calling a small Apex `@RestResource`
+that reuses your existing `SosOrderService`. That step needs the Salesforce
+source and a sandbox connection so it matches your exact objects, fields,
+validation rules and approval gate. Ask and we'll wire it.

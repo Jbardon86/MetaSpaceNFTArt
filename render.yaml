@@ -37,6 +37,23 @@ services:
         sync: false
       - key: MAIL_FROM
         value: Endless Fun <order@endlessfun.biz>
+      # Salesforce (Lead + Opportunity per order) — Connected App, Client
+      # Credentials flow. Leave blank to disable. TEST IN THE SANDBOX FIRST:
+      # set SF_LOGIN_URL to https://test.salesforce.com for the sandbox.
+      - key: SF_LOGIN_URL
+        sync: false
+      - key: SF_CLIENT_ID
+        sync: false
+      - key: SF_CLIENT_SECRET
+        sync: false
+      - key: SF_API_VERSION
+        value: v62.0
+      - key: SF_LEAD_SOURCE
+        value: Trade Show
+      - key: SF_OPP_STAGE
+        value: Proposal
+      - key: SF_CREATE_OPPORTUNITY
+        value: "1"
 
   # Hosted web version of the app — a shareable link anyone can open in a browser.
   - type: web

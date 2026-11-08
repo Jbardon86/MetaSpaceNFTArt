@@ -16,6 +16,7 @@
 const express = require('express');
 const nodemailer = require('nodemailer');
 const sos = require('./sos');
+const salesforce = require('./salesforce');
 
 const app = express();
 app.use(express.json({ limit: '5mb' }));
@@ -223,16 +224,29 @@ app.get('/api/catalog', async (req, res) => {
 app.post('/api/orders', async (req, res) => {
   const order = req.body;
   try {
-    // 1) Send the confirmation email (if requested + we have an address)
+    // 1) Send the confirmation email (if requested + we have an address).
+    //    Don't let an email hiccup lose the order — log and continue.
+    let emailError = null;
     if (order.emailConfirmation && order.contact?.email) {
-      await transporter.sendMail(buildConfirmationEmail(order));
+      try {
+        await transporter.sendMail(buildConfirmationEmail(order));
+      } catch (err) {
+        emailError = String(err && err.message ? err.message : err);
+        console.error('Confirmation email failed:', err);
+      }
     }
 
-    // 2) TODO (Phase 2): create the order in Salesforce with jsforce and return
-    //    the real Salesforce Order Id here.
-    const salesforceId = 'TODO-salesforce-id';
+    // 2) Push to Salesforce: create a Lead (contact capture) + an Opportunity
+    //    (the order). Non-fatal: if Salesforce is down or not configured yet,
+    //    the order still succeeds and Staff can re-sync later.
+    const sf = await salesforce.pushOrder(order);
 
-    res.json({ salesforceId });
+    // Keep the legacy `salesforceId` the app expects (Opportunity first, then
+    // Lead, then a local fallback so the app always gets a usable id).
+    const salesforceId =
+      sf.opportunityId || sf.leadId || `local-${(order.id || '').slice(-6).toUpperCase()}`;
+
+    res.json({ salesforceId, salesforce: sf, emailError });
   } catch (err) {
     console.error('Order handling failed:', err);
     res.status(500).json({ error: String(err && err.message ? err.message : err) });
