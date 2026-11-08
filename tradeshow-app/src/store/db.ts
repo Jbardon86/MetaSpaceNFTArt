@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Customer, Order, Product, Session } from '../types';
+import { Rep } from '../reps';
 import { seedCustomers, seedProducts } from '../data/seed';
 
 // Thin persistence layer. Everything is stored as JSON under a few keys.
@@ -11,6 +12,7 @@ const KEYS = {
   customers: 'tso.customers',
   orders: 'tso.orders',
   session: 'tso.session',
+  boothRep: 'tso.boothRep',
   // Bump this version to re-seed the sample catalog for existing installs
   // (e.g. after adding photos to the seed data).
   seeded: 'tso.seeded.v3',
@@ -55,6 +57,11 @@ export const saveOrders = (o: Order[]) => writeJSON(KEYS.orders, o);
 export const getSession = () => readJSON<Session | null>(KEYS.session, null);
 export const saveSession = (s: Session | null) =>
   s ? writeJSON(KEYS.session, s) : AsyncStorage.removeItem(KEYS.session);
+
+// ---- Booth rep (device setting: which rep gets credit for this kiosk) ----
+export const getBoothRep = () => readJSON<Rep | null>(KEYS.boothRep, null);
+export const saveBoothRep = (r: Rep | null) =>
+  r ? writeJSON(KEYS.boothRep, r) : AsyncStorage.removeItem(KEYS.boothRep);
 
 /** Danger: wipe everything (used by "Reset demo data" in Settings). */
 export async function resetAll(): Promise<void> {

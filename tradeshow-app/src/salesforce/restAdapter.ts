@@ -32,6 +32,7 @@ function toSalesforceOrderPayload(order: Order) {
     billingAddress: order.billingAddress ?? null,
     eventName: order.eventName,
     repName: order.repName,
+    repSosId: order.repSosId ?? null,
     notes: order.notes,
     createdAt: order.createdAt,
     lines: order.lines.map((l) => ({

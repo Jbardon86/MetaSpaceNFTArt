@@ -1,14 +1,17 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, PressableScale } from '../components/ui';
 import { useApp } from '../store/AppContext';
 import { ScreenProps } from '../navigation';
+import { REPS, Rep } from '../reps';
 import { colors, font, spacing } from '../theme';
 
 // The staff-only hub, reached from the Welcome screen after entering the PIN.
 export default function StaffScreen({ navigation }: ScreenProps<'Staff'>) {
-  const { orders, pendingCount, adapterLabel } = useApp();
+  const { orders, pendingCount, adapterLabel, boothRep, setBoothRep } = useApp();
   const insets = useSafeAreaInsets();
+  const [repPickerOpen, setRepPickerOpen] = useState(false);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.lg }]}>
@@ -17,6 +20,12 @@ export default function StaffScreen({ navigation }: ScreenProps<'Staff'>) {
 
       <View style={{ height: spacing.xl }} />
 
+      <MenuItem
+        title="Booth rep"
+        subtitle={boothRep ? `${boothRep.name} — gets credit for orders here` : 'Not set — tap to choose who gets credit'}
+        emoji="🧑‍💼"
+        onPress={() => setRepPickerOpen(true)}
+      />
       <MenuItem
         title="View orders"
         subtitle={`${orders.length} total · ${pendingCount} pending sync`}
@@ -36,7 +45,77 @@ export default function StaffScreen({ navigation }: ScreenProps<'Staff'>) {
         variant="secondary"
         onPress={() => navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] })}
       />
+
+      <RepPicker
+        visible={repPickerOpen}
+        current={boothRep}
+        onPick={(r) => {
+          setBoothRep(r);
+          setRepPickerOpen(false);
+        }}
+        onClose={() => setRepPickerOpen(false)}
+      />
     </View>
+  );
+}
+
+function RepPicker({
+  visible,
+  current,
+  onPick,
+  onClose,
+}: {
+  visible: boolean;
+  current: Rep | null;
+  onPick: (r: Rep | null) => void;
+  onClose: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.backdrop}>
+        <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
+          <Text style={styles.sheetTitle}>Who's working this booth?</Text>
+          <Text style={styles.sheetSub}>Orders placed here are credited to this rep.</Text>
+
+          <View style={{ height: spacing.md }} />
+
+          {REPS.map((r) => (
+            <RepRow
+              key={r.sosId}
+              label={r.name}
+              selected={current?.sosId === r.sosId}
+              onPress={() => onPick(r)}
+            />
+          ))}
+          <RepRow
+            label="No rep (leave unassigned)"
+            selected={!current}
+            onPress={() => onPick(null)}
+          />
+
+          <View style={{ height: spacing.md }} />
+          <Button title="Close" variant="secondary" onPress={onClose} />
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function RepRow({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.repRow, pressed && { opacity: 0.6 }]}>
+      <Text style={[styles.repName, selected && { color: colors.primary, fontWeight: '800' }]}>{label}</Text>
+      {selected ? <Text style={styles.check}>✓</Text> : null}
+    </Pressable>
   );
 }
 
@@ -74,4 +153,26 @@ const styles = StyleSheet.create({
   itemTitle: { fontSize: font.h3, fontWeight: '700', color: colors.text },
   itemSub: { fontSize: font.small, color: colors.textMuted, marginTop: 2 },
   chevron: { fontSize: 28, color: colors.textMuted, marginLeft: spacing.md },
+
+  // Rep picker sheet
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: colors.bg,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+  },
+  sheetTitle: { fontSize: font.h2, fontWeight: '800', color: colors.text },
+  sheetSub: { fontSize: font.small, color: colors.textMuted, marginTop: 4 },
+  repRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  repName: { fontSize: font.h3, color: colors.text, fontWeight: '600' },
+  check: { fontSize: font.h3, color: colors.primary, fontWeight: '800' },
 });

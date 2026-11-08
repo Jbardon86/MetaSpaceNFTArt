@@ -89,6 +89,8 @@ export interface Order {
   billingAddress?: Address | null;
   /** Rep who took the order. */
   repName: string;
+  /** SOS rep id for the attributed rep (sets Salesforce SOS_Sales_Rep__c). */
+  repSosId?: string | null;
   /** Customer's signature (serialized SignatureData JSON), if captured. */
   signature?: string | null;
   /** ISO timestamp string. */
