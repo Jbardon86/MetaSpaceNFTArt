@@ -106,13 +106,29 @@ Opportunity (named `<customer> — Trade Show #XXXXXX`). The API response from
 `POST /api/orders` includes a `salesforce` object with `leadId`,
 `opportunityId`, and any `errors`.
 
-### Phase 2b (follow-up) — real line items that feed Send-to-SOS
-The current Opportunity captures the line items in its **Description** and sets
-**Amount** to the order total; it's kept in an **open** stage so it does *not*
-auto-fire the approval / Send-to-SOS flow during testing. To make the order
-flow all the way into SOS, we upgrade it to real **OpportunityLineItems** — by
-matching each app product (its SOS item id) to the Salesforce Product2
-(`SOS_Item_Id__c`) → PricebookEntry — or by calling a small Apex `@RestResource`
-that reuses your existing `SosOrderService`. That step needs the Salesforce
-source and a sandbox connection so it matches your exact objects, fields,
-validation rules and approval gate. Ask and we'll wire it.
+### Line items (implemented, verified against the sandbox)
+The Opportunity carries **real OpportunityLineItems**, not just a text summary:
+- It's placed on the **Standard Price Book**.
+- Each app line is matched to a `Product2` by **`SOS_Item_Id__c`** (the app's
+  product id) or, failing that, by **`ProductCode`** (the SKU).
+- The line's `UnitPrice` is the app's **effective** per-unit price
+  (`lineTotal / quantity`), so the Salesforce **Amount** equals what the
+  customer saw even with rep discounts.
+- Any line with no matching active product is listed in the Opportunity
+  **Description** so nothing is silently lost (`salesforce.unmatched` in the
+  API response names them).
+
+Set `SF_ADD_LINE_ITEMS=0` to fall back to a header-only Opportunity (lines in
+the Description, `Amount` = total). The Opportunity is kept in an **open** stage
+(`Proposal`) on purpose, so it does **not** auto-fire your approval /
+Send-to-SOS flow — a human moves it forward in Salesforce as usual.
+
+### Still open (next, if you want it)
+- **Account/Contact link + rep attribution.** The order currently creates a
+  standalone Lead + Opportunity. We can match/create the Account (by
+  `SOS_Customer_Id__c` or name) and set `SOS_Sales_Rep__c` from the rep so it
+  lands in the right rep's pipeline.
+- **Auto-advance to Send-to-SOS.** Today a person approves/advances the
+  Opportunity. If you want kiosk orders to flow to SOS automatically, we set the
+  stage/flag your `SosOrderService` watches (needs your Apex source to match the
+  exact trigger).
