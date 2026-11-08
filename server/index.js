@@ -220,6 +220,20 @@ app.get('/api/catalog', async (req, res) => {
   }
 });
 
+// Lead-only capture: someone who isn't ordering today. Creates just a
+// Salesforce Lead tagged to the show (LeadSource). Payload has the same contact/
+// account/address/event shape as an order, minus the lines.
+app.post('/api/leads', async (req, res) => {
+  const lead = req.body || {};
+  try {
+    const sf = await salesforce.pushLead(lead);
+    res.json({ salesforceLeadId: sf.leadId, salesforce: sf });
+  } catch (err) {
+    console.error('Lead capture failed:', err);
+    res.status(500).json({ error: String(err && err.message ? err.message : err) });
+  }
+});
+
 // The app POSTs an order here (payload shape from restAdapter.toSalesforceOrderPayload).
 app.post('/api/orders', async (req, res) => {
   const order = req.body;

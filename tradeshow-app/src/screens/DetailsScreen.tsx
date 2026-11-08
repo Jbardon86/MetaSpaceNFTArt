@@ -60,7 +60,7 @@ function AddressFields({
 // Customer enters their own details. Deliberately a plain form — no search of
 // existing customers, so no one sees anyone else's information.
 export default function DetailsScreen({ navigation }: ScreenProps<'Details'>) {
-  const { addCustomer, products } = useApp();
+  const { addCustomer, captureLead, products } = useApp();
   const draft = useDraft();
   const insets = useSafeAreaInsets();
 
@@ -70,6 +70,7 @@ export default function DetailsScreen({ navigation }: ScreenProps<'Details'>) {
   const [email, setEmail] = useState(draft.customer?.email ?? '');
   const [phone, setPhone] = useState(draft.customer?.phone ?? '');
   const [scanning, setScanning] = useState(false);
+  const [savingLead, setSavingLead] = useState(false);
 
   const canContinue = name.trim().length > 0 && (email.trim().length > 0 || phone.trim().length > 0);
 
@@ -183,6 +184,32 @@ export default function DetailsScreen({ navigation }: ScreenProps<'Details'>) {
     navigation.navigate('OrderProducts');
   };
 
+  // Not ordering today — just capture this person as a Salesforce Lead for the
+  // show. Great right after scanning a badge or business card.
+  const saveLead = async () => {
+    setSavingLead(true);
+    try {
+      const billTo = draft.billSameAsShip ? draft.shipTo : draft.billTo;
+      await captureLead({
+        name,
+        company,
+        email,
+        phone,
+        shippingAddress: draft.shipTo,
+        billingAddress: billTo,
+      });
+      Alert.alert(
+        'Saved — thanks!',
+        `${name.trim() || 'Your info'} was added to our leads for this show. We'll be in touch.`,
+        [{ text: 'Done', onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] }) }]
+      );
+    } catch (e) {
+      Alert.alert('Could not save', e instanceof Error ? e.message : 'Please try again.');
+    } finally {
+      setSavingLead(false);
+    }
+  };
+
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
@@ -207,7 +234,8 @@ export default function DetailsScreen({ navigation }: ScreenProps<'Details'>) {
               disabled={scanning}
             />
             <Text style={styles.scanHint}>
-              Snap an order form to build the whole order, or a card to fill contact info.
+              Snap an order form to build the whole order, or a badge / business card to fill contact
+              info — then place an order or just save them as a lead.
             </Text>
           </View>
         ) : null}
@@ -247,7 +275,15 @@ export default function DetailsScreen({ navigation }: ScreenProps<'Details'>) {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
-        <Button title="Continue to products" onPress={cont} disabled={!canContinue} />
+        <Button title="Continue to products" onPress={cont} disabled={!canContinue || savingLead} />
+        <View style={{ height: spacing.sm }} />
+        <Button
+          title={savingLead ? 'Saving…' : 'Not ordering today — just save my info'}
+          variant="secondary"
+          onPress={saveLead}
+          disabled={!canContinue}
+          loading={savingLead}
+        />
       </View>
     </KeyboardAvoidingView>
   );

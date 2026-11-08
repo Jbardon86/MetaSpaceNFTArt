@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Card, PressableScale } from '../components/ui';
+import { Button, Card, Field, PressableScale } from '../components/ui';
 import { useApp } from '../store/AppContext';
 import { ScreenProps } from '../navigation';
 import { REPS, Rep } from '../reps';
@@ -9,9 +9,11 @@ import { colors, font, spacing } from '../theme';
 
 // The staff-only hub, reached from the Welcome screen after entering the PIN.
 export default function StaffScreen({ navigation }: ScreenProps<'Staff'>) {
-  const { orders, pendingCount, adapterLabel, boothRep, setBoothRep } = useApp();
+  const { orders, pendingCount, adapterLabel, boothRep, setBoothRep, boothEvent, setBoothEvent } =
+    useApp();
   const insets = useSafeAreaInsets();
   const [repPickerOpen, setRepPickerOpen] = useState(false);
+  const [eventOpen, setEventOpen] = useState(false);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.lg }]}>
@@ -25,6 +27,12 @@ export default function StaffScreen({ navigation }: ScreenProps<'Staff'>) {
         subtitle={boothRep ? `${boothRep.name} — gets credit for orders here` : 'Not set — tap to choose who gets credit'}
         emoji="🧑‍💼"
         onPress={() => setRepPickerOpen(true)}
+      />
+      <MenuItem
+        title="Show / event"
+        subtitle={boothEvent ? `${boothEvent} — tags orders & leads` : 'Not set — tap to name this show'}
+        emoji="🎪"
+        onPress={() => setEventOpen(true)}
       />
       <MenuItem
         title="View orders"
@@ -55,7 +63,61 @@ export default function StaffScreen({ navigation }: ScreenProps<'Staff'>) {
         }}
         onClose={() => setRepPickerOpen(false)}
       />
+
+      <EventPicker
+        visible={eventOpen}
+        current={boothEvent}
+        onSave={(name) => {
+          setBoothEvent(name);
+          setEventOpen(false);
+        }}
+        onClose={() => setEventOpen(false)}
+      />
     </View>
+  );
+}
+
+function EventPicker({
+  visible,
+  current,
+  onSave,
+  onClose,
+}: {
+  visible: boolean;
+  current: string;
+  onSave: (name: string) => void;
+  onClose: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const [text, setText] = useState(current);
+  // Re-sync the field whenever the sheet reopens.
+  useEffect(() => {
+    if (visible) setText(current);
+  }, [visible, current]);
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.backdrop}>
+        <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
+          <Text style={styles.sheetTitle}>Which show is this?</Text>
+          <Text style={styles.sheetSub}>
+            Tags every order and lead from this booth (saved as the Salesforce Lead Source).
+          </Text>
+          <View style={{ height: spacing.md }} />
+          <Field
+            label="Show / event name"
+            value={text}
+            onChangeText={setText}
+            placeholder="e.g. Toy Fair 2026"
+            autoCapitalize="words"
+          />
+          <View style={{ height: spacing.sm }} />
+          <Button title="Save" onPress={() => onSave(text)} />
+          <View style={{ height: spacing.sm }} />
+          <Button title="Clear" variant="secondary" onPress={() => onSave('')} />
+        </View>
+      </View>
+    </Modal>
   );
 }
 

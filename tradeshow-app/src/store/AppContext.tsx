@@ -7,11 +7,11 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Customer, Order, Product, Session } from '../types';
+import { Address, Customer, Order, Product, Session } from '../types';
 import { Rep } from '../reps';
 import { newId } from './id';
 import * as db from './db';
-import { MockSalesforceAdapter } from '../salesforce/adapter';
+import { LeadCapture, MockSalesforceAdapter, PushLeadResult } from '../salesforce/adapter';
 import { RestSalesforceAdapter } from '../salesforce/restAdapter';
 import { brand } from '../brand';
 import { fetchRemoteCatalog } from '../catalog/remote';
@@ -49,9 +49,23 @@ interface AppState {
   // booth rep (device setting used for order attribution)
   boothRep: Rep | null;
   setBoothRep: (r: Rep | null) => Promise<void>;
+  // the show/event (device setting; stored as Salesforce LeadSource)
+  boothEvent: string;
+  setBoothEvent: (name: string) => Promise<void>;
 
   // customers
   addCustomer: (c: Omit<Customer, 'id'>) => Promise<Customer>;
+
+  // lead-only capture (not ordering today) -> Salesforce Lead for this show
+  captureLead: (info: {
+    name: string;
+    company: string;
+    email: string;
+    phone: string;
+    shippingAddress?: Address | null;
+    billingAddress?: Address | null;
+    notes?: string;
+  }) => Promise<PushLeadResult>;
 
   // orders
   submitOrder: (
@@ -73,6 +87,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [lastCatalogSync, setLastCatalogSync] = useState<string | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [boothRep, setBoothRepState] = useState<Rep | null>(null);
+  const [boothEvent, setBoothEventState] = useState<string>('');
   const syncing = useRef(false);
 
   // Pull the shared catalog from the backend (SOS). Falls back to the locally
@@ -99,18 +114,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       await db.ensureSeeded();
-      const [s, p, c, o, br] = await Promise.all([
+      const [s, p, c, o, br, be] = await Promise.all([
         db.getSession(),
         db.getProducts(),
         db.getCustomers(),
         db.getOrders(),
         db.getBoothRep(),
+        db.getBoothEvent(),
       ]);
       setSession(s);
       setProducts(p); // show cached catalog immediately
       setCustomers(c);
       setOrders(o);
       setBoothRepState(br);
+      setBoothEventState(be ?? '');
       setLoading(false);
       // Then refresh from the backend in the background.
       refreshCatalog();
@@ -131,6 +148,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const setBoothRep = useCallback(async (r: Rep | null) => {
     await db.saveBoothRep(r);
     setBoothRepState(r);
+  }, []);
+
+  const setBoothEvent = useCallback(async (name: string) => {
+    const v = name.trim();
+    await db.saveBoothEvent(v || null);
+    setBoothEventState(v);
   }, []);
 
   const upsertProduct = useCallback(
@@ -168,6 +191,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return next;
     });
   }, []);
+
+  const captureLead = useCallback(
+    async (info: {
+      name: string;
+      company: string;
+      email: string;
+      phone: string;
+      shippingAddress?: Address | null;
+      billingAddress?: Address | null;
+      notes?: string;
+    }): Promise<PushLeadResult> => {
+      const lead: LeadCapture = {
+        contact: { name: info.name.trim(), email: info.email.trim(), phone: info.phone.trim() },
+        account: { name: info.company.trim() },
+        shippingAddress: info.shippingAddress ?? null,
+        billingAddress: info.billingAddress ?? null,
+        eventName: boothEvent || brand.eventName,
+        repName: boothRep?.name ?? brand.deviceName,
+        repSosId: boothRep?.sosId ?? null,
+        notes: info.notes,
+      };
+      return adapter.pushLead(lead);
+    },
+    [boothRep, boothEvent]
+  );
 
   const addCustomer = useCallback(async (c: Omit<Customer, 'id'>) => {
     const created: Customer = { ...c, id: newId(), salesforceId: null };
@@ -233,7 +281,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         status: 'pending',
         repName: boothRep?.name ?? brand.deviceName,
         repSosId: boothRep?.sosId ?? null,
-        eventName: brand.eventName,
+        eventName: boothEvent || brand.eventName,
         salesforceId: null,
         syncError: null,
       };
@@ -245,7 +293,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       persistOrders(withNew.map((o) => (o.id === order.id ? pushed : o)));
       return pushed;
     },
-    [persistOrders, pushOne, boothRep]
+    [persistOrders, pushOne, boothRep, boothEvent]
   );
 
   const pendingCount = useMemo(
@@ -264,6 +312,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     logout,
     boothRep,
     setBoothRep,
+    boothEvent,
+    setBoothEvent,
     upsertProduct,
     toggleProductActive,
     remoteCatalog: usesRemoteCatalog,
@@ -272,6 +322,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     catalogError,
     refreshCatalog,
     addCustomer,
+    captureLead,
     submitOrder,
     syncPending,
     pendingCount,

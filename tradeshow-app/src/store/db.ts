@@ -13,6 +13,7 @@ const KEYS = {
   orders: 'tso.orders',
   session: 'tso.session',
   boothRep: 'tso.boothRep',
+  boothEvent: 'tso.boothEvent',
   // Bump this version to re-seed the sample catalog for existing installs
   // (e.g. after adding photos to the seed data).
   seeded: 'tso.seeded.v3',
@@ -62,6 +63,11 @@ export const saveSession = (s: Session | null) =>
 export const getBoothRep = () => readJSON<Rep | null>(KEYS.boothRep, null);
 export const saveBoothRep = (r: Rep | null) =>
   r ? writeJSON(KEYS.boothRep, r) : AsyncStorage.removeItem(KEYS.boothRep);
+
+// ---- Booth event/show (device setting: the show, used as Salesforce LeadSource) ----
+export const getBoothEvent = () => readJSON<string | null>(KEYS.boothEvent, null);
+export const saveBoothEvent = (s: string | null) =>
+  s ? writeJSON(KEYS.boothEvent, s) : AsyncStorage.removeItem(KEYS.boothEvent);
 
 /** Danger: wipe everything (used by "Reset demo data" in Settings). */
 export async function resetAll(): Promise<void> {

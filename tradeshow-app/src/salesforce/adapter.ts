@@ -1,4 +1,4 @@
-import { Customer, Order, Product } from '../types';
+import { Address, Customer, Order, Product } from '../types';
 import { buildConfirmationEmail } from '../email/confirmation';
 
 // ---------------------------------------------------------------------------
@@ -13,6 +13,24 @@ import { buildConfirmationEmail } from '../email/confirmation';
 
 export interface PushOrderResult {
   salesforceId: string;
+}
+
+/** A contact captured at the booth who isn't ordering today. */
+export interface LeadCapture {
+  contact: { name: string; email: string; phone: string };
+  account: { name: string };
+  shippingAddress?: Address | null;
+  billingAddress?: Address | null;
+  /** The show, stored as LeadSource in Salesforce. */
+  eventName: string;
+  /** Rep working the booth (for the Lead description). */
+  repName: string;
+  repSosId?: string | null;
+  notes?: string;
+}
+
+export interface PushLeadResult {
+  salesforceLeadId: string | null;
 }
 
 export interface SalesforceAdapter {
@@ -31,6 +49,9 @@ export interface SalesforceAdapter {
    * Throws on failure (network, validation) so the queue can retry.
    */
   pushOrder(order: Order): Promise<PushOrderResult>;
+
+  /** Create a Lead only (no order) for a contact captured at the booth. */
+  pushLead(lead: LeadCapture): Promise<PushLeadResult>;
 }
 
 // A deliberately imperfect fake: it adds latency and occasionally "fails" so
@@ -76,5 +97,16 @@ export class MockSalesforceAdapter implements SalesforceAdapter {
     // Pretend Salesforce returned a fresh 18-char-ish Order Id.
     const fakeId = `801${Math.random().toString(36).slice(2, 12).toUpperCase()}`;
     return { salesforceId: fakeId };
+  }
+
+  async pushLead(lead: LeadCapture): Promise<PushLeadResult> {
+    await this.delay(600);
+    console.log('[mock lead] would create Salesforce Lead:', {
+      name: lead.contact.name,
+      company: lead.account.name,
+      source: lead.eventName,
+    });
+    const fakeId = `00Q${Math.random().toString(36).slice(2, 12).toUpperCase()}`;
+    return { salesforceLeadId: fakeId };
   }
 }

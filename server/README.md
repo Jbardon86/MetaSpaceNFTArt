@@ -5,8 +5,14 @@ orders into Salesforce. The app talks to this so email/Salesforce credentials
 never live inside the app.
 
 ## What it does today
-- `POST /api/orders` — receives an order from the app, emails the customer a
-  confirmation from order@endlessfun.biz (if they opted in).
+- `POST /api/orders` — receives an order, emails the confirmation (if opted in),
+  and creates a Salesforce Lead + Opportunity (with line items, Account, rep).
+- `POST /api/leads` — lead-only capture: someone who isn't ordering today.
+  Creates just a Salesforce **Lead** tagged to the show (`LeadSource`). Same
+  contact/account/address/event payload as an order, minus the lines. Pairs with
+  the badge / business-card scanner: scan → fields fill → "just save my info".
+  The show comes from the booth's **Show / event** setting in the admin area
+  (falls back to `SF_LEAD_SOURCE`).
 - `GET /health` — health check.
 
 ## Run it locally

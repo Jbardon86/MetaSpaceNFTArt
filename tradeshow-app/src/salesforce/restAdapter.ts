@@ -1,5 +1,5 @@
 import { Customer, Order, Product, lineTotal } from '../types';
-import { PushOrderResult, SalesforceAdapter } from './adapter';
+import { LeadCapture, PushLeadResult, PushOrderResult, SalesforceAdapter } from './adapter';
 
 // ---------------------------------------------------------------------------
 // PHASE 2 SKELETON — not wired up yet.
@@ -86,6 +86,13 @@ export class RestSalesforceAdapter implements SalesforceAdapter {
     return this.request<PushOrderResult>('/api/orders', {
       method: 'POST',
       body: JSON.stringify(toSalesforceOrderPayload(order)),
+    });
+  }
+
+  async pushLead(lead: LeadCapture): Promise<PushLeadResult> {
+    return this.request<PushLeadResult>('/api/leads', {
+      method: 'POST',
+      body: JSON.stringify(lead),
     });
   }
 }

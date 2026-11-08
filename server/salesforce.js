@@ -271,6 +271,10 @@ async function createLead(order) {
   const { first, last } = splitName(order.contact?.name);
   const addr = order.billingAddress || order.shippingAddress || {};
   const company = order.account?.name || 'Trade Show (no company)';
+  const hasLines = (order.lines?.length || 0) > 0;
+  const heading = hasLines
+    ? `Trade show order #${shortId(order)} (total ${money(orderTotal(order))})`
+    : `Trade show lead — captured at the booth (no order placed)`;
   const fields = {
     FirstName: first || undefined,
     LastName: last,
@@ -283,10 +287,10 @@ async function createLead(order) {
     PostalCode: addr.zip || undefined,
     LeadSource: order.eventName || SF_LEAD_SOURCE,
     Description:
-      `Trade show order #${shortId(order)} (total ${money(orderTotal(order))})` +
+      heading +
       (order.repName ? `\nRep: ${order.repName}` : '') +
       (order.notes ? `\nNotes: ${order.notes}` : '') +
-      (order.lines?.length ? `\n\nItems:\n${linesText(order)}` : ''),
+      (hasLines ? `\n\nItems:\n${linesText(order)}` : ''),
   };
   Object.keys(fields).forEach((k) => fields[k] === undefined && delete fields[k]);
   return createSObject('Lead', fields, { 'Sforce-Duplicate-Rule-Header': 'allowSave=true' });
@@ -389,6 +393,20 @@ async function createOpportunity(order) {
   return result;
 }
 
+// Lead-only capture (someone not ordering today): creates just a Lead, tagged
+// to the show via LeadSource. Never throws.
+async function pushLead(payload) {
+  const result = { configured: isConfigured(), leadId: null, errors: [] };
+  if (!isConfigured()) return result;
+  try {
+    result.leadId = await createLead(payload);
+  } catch (err) {
+    console.error('Salesforce Lead-only create failed:', err);
+    result.errors.push(`lead: ${err.message || err}`);
+  }
+  return result;
+}
+
 // Orchestrates both, never throwing.
 async function pushOrder(order) {
   const result = {
@@ -435,5 +453,6 @@ module.exports = {
   createLead,
   createOpportunity,
   pushOrder,
+  pushLead,
   getStandardPricebookId,
 };
