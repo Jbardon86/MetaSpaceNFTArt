@@ -58,7 +58,7 @@ export default function OrderProductsScreen({ navigation }: ScreenProps<'OrderPr
         )}
         ListEmptyComponent={
           <Text style={styles.noResults}>
-            No products. Add some in the Catalog screen first.
+            {query.trim() ? `No products match “${query.trim()}”.` : 'No products available right now.'}
           </Text>
         }
       />

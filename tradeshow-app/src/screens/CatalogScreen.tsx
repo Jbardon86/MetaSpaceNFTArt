@@ -36,6 +36,8 @@ export default function CatalogScreen(_props: ScreenProps<'Catalog'>) {
     );
   }, [products, query]);
 
+  const shownCount = useMemo(() => products.filter((p) => p.active).length, [products]);
+
   return (
     <View style={{ flex: 1 }}>
       <View style={styles.searchWrap}>
@@ -60,21 +62,31 @@ export default function CatalogScreen(_props: ScreenProps<'Catalog'>) {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 100 }}
         ListHeaderComponent={
-          remoteCatalog ? (
-            <Card style={styles.syncCard}>
-              <Text style={styles.syncTitle}>📦 Catalog synced from SOS Inventory</Text>
+          <View>
+            <Card style={styles.approveCard}>
+              <Text style={styles.syncTitle}>✅ Customer-visible items</Text>
               <Text style={styles.syncSub}>
-                Manage products in SOS — this list mirrors it. {catalogError ? `\n⚠️ ${catalogError}` : ''}
+                Only items toggled ON are shown to customers at the kiosk. New items stay hidden
+                until you approve them. {shownCount} of {products.length} shown.
               </Text>
-              <View style={{ height: spacing.md }} />
-              <Button
-                title={catalogSyncing ? 'Syncing…' : 'Sync now'}
-                variant="secondary"
-                onPress={refreshCatalog}
-                loading={catalogSyncing}
-              />
             </Card>
-          ) : null
+            {remoteCatalog ? (
+              <Card style={styles.syncCard}>
+                <Text style={styles.syncTitle}>📦 Catalog synced from SOS Inventory</Text>
+                <Text style={styles.syncSub}>
+                  Product details (name, price, photo) come from SOS; your show/hide choices here
+                  stick through syncs. {catalogError ? `\n⚠️ ${catalogError}` : ''}
+                </Text>
+                <View style={{ height: spacing.md }} />
+                <Button
+                  title={catalogSyncing ? 'Syncing…' : 'Sync now'}
+                  variant="secondary"
+                  onPress={refreshCatalog}
+                  loading={catalogSyncing}
+                />
+              </Card>
+            ) : null}
+          </View>
         }
         renderItem={({ item }) => (
           <Card style={styles.row}>
@@ -88,7 +100,12 @@ export default function CatalogScreen(_props: ScreenProps<'Catalog'>) {
                 </Text>
               </View>
             </Pressable>
-            <Switch value={item.active} onValueChange={() => toggleProductActive(item.id)} />
+            <View style={styles.switchWrap}>
+              <Switch value={item.active} onValueChange={() => toggleProductActive(item.id)} />
+              <Text style={[styles.switchLabel, item.active && styles.switchLabelOn]}>
+                {item.active ? 'Shown' : 'Hidden'}
+              </Text>
+            </View>
           </Card>
         )}
         ListEmptyComponent={
@@ -281,8 +298,12 @@ const styles = StyleSheet.create({
   },
   count: { fontSize: font.small, color: colors.textMuted, marginTop: spacing.xs, marginLeft: spacing.xs },
   syncCard: { marginBottom: spacing.lg },
+  approveCard: { marginBottom: spacing.md },
   syncTitle: { fontSize: font.h3, fontWeight: '700', color: colors.text },
   syncSub: { fontSize: font.small, color: colors.textMuted, marginTop: spacing.xs },
+  switchWrap: { alignItems: 'center', marginLeft: spacing.sm },
+  switchLabel: { fontSize: font.small, color: colors.textMuted, marginTop: 2, fontWeight: '600' },
+  switchLabelOn: { color: colors.primary },
   footer: {
     position: 'absolute',
     left: 0,
