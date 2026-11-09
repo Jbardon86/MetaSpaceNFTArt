@@ -77,6 +77,13 @@ interface AppState {
 
 const Ctx = createContext<AppState | undefined>(undefined);
 
+// A product is shown to customers only if the admin has approved it. Approval
+// lives in a separate map (db) that survives SOS re-syncs, so `active` is always
+// derived from it here. Unknown/new products default to NOT approved (hidden).
+function withApprovals(list: Product[], approvals: db.ApprovalMap): Product[] {
+  return list.map((p) => ({ ...p, active: approvals[p.id] === true }));
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<Session | null>(null);
@@ -88,6 +95,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [boothRep, setBoothRepState] = useState<Rep | null>(null);
   const [boothEvent, setBoothEventState] = useState<string>('');
+  const approvalsRef = useRef<db.ApprovalMap>({});
   const syncing = useRef(false);
 
   // Pull the shared catalog from the backend (SOS). Falls back to the locally
@@ -99,8 +107,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       const remote = await fetchRemoteCatalog();
       if (remote && remote.length > 0) {
-        setProducts(remote);
-        db.saveProducts(remote); // cache for offline
+        // Apply the admin's approvals so curation survives the sync; new SOS
+        // items arrive hidden until the admin approves them.
+        const applied = withApprovals(remote, approvalsRef.current);
+        setProducts(applied);
+        db.saveProducts(applied); // cache for offline
         setLastCatalogSync(new Date().toISOString());
       }
     } catch (e) {
@@ -114,16 +125,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       await db.ensureSeeded();
-      const [s, p, c, o, br, be] = await Promise.all([
+      const [s, p, c, o, br, be, appr] = await Promise.all([
         db.getSession(),
         db.getProducts(),
         db.getCustomers(),
         db.getOrders(),
         db.getBoothRep(),
         db.getBoothEvent(),
+        db.getApprovals(),
       ]);
+      approvalsRef.current = appr;
       setSession(s);
-      setProducts(p); // show cached catalog immediately
+      setProducts(withApprovals(p, appr)); // only approved products are shown
       setCustomers(c);
       setOrders(o);
       setBoothRepState(br);
@@ -161,15 +174,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setProducts((prev) => {
         let next: Product[];
         if (p.id && prev.some((x) => x.id === p.id)) {
-          next = prev.map((x) => (x.id === p.id ? { ...x, ...p } : x));
+          // Edit: keep approval-derived visibility, don't let the form flip it.
+          next = prev.map((x) =>
+            x.id === p.id ? { ...x, ...p, active: approvalsRef.current[x.id] === true } : x
+          );
         } else {
+          const id = p.id ?? newId();
+          // A product the admin adds by hand is approved (shown) by default.
+          const nextApprovals: db.ApprovalMap = { ...approvalsRef.current, [id]: true };
+          approvalsRef.current = nextApprovals;
+          db.saveApprovals(nextApprovals);
           const created: Product = {
-            id: p.id ?? newId(),
+            id,
             name: p.name,
             sku: p.sku ?? '',
             price: p.price ?? 0,
             unit: p.unit ?? 'each',
-            active: p.active ?? true,
+            active: true,
             description: p.description ?? '',
             highlights: p.highlights ?? [],
             imageUri: p.imageUri ?? null,
@@ -184,9 +205,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  // Approve / un-approve a product (show or hide it from customers). Persisted
+  // to the approvals map so it survives SOS re-syncs.
   const toggleProductActive = useCallback(async (id: string) => {
+    const nextApprovals: db.ApprovalMap = {
+      ...approvalsRef.current,
+      [id]: !(approvalsRef.current[id] === true),
+    };
+    approvalsRef.current = nextApprovals;
+    db.saveApprovals(nextApprovals);
     setProducts((prev) => {
-      const next = prev.map((x) => (x.id === id ? { ...x, active: !x.active } : x));
+      const next = prev.map((x) =>
+        x.id === id ? { ...x, active: nextApprovals[id] === true } : x
+      );
       db.saveProducts(next);
       return next;
     });

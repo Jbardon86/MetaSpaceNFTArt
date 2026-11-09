@@ -14,6 +14,7 @@ const KEYS = {
   session: 'tso.session',
   boothRep: 'tso.boothRep',
   boothEvent: 'tso.boothEvent',
+  approvals: 'tso.approvals',
   // Bump this version to re-seed the sample catalog for existing installs
   // (e.g. after adding photos to the seed data).
   seeded: 'tso.seeded.v3',
@@ -68,6 +69,13 @@ export const saveBoothRep = (r: Rep | null) =>
 export const getBoothEvent = () => readJSON<string | null>(KEYS.boothEvent, null);
 export const saveBoothEvent = (s: string | null) =>
   s ? writeJSON(KEYS.boothEvent, s) : AsyncStorage.removeItem(KEYS.boothEvent);
+
+// ---- Approvals (which products are shown to customers) ----
+// Map of productId -> true. Survives SOS re-syncs, so admin curation sticks.
+// A product not in the map is NOT approved (hidden) by default — opt-in.
+export type ApprovalMap = Record<string, boolean>;
+export const getApprovals = () => readJSON<ApprovalMap>(KEYS.approvals, {});
+export const saveApprovals = (m: ApprovalMap) => writeJSON(KEYS.approvals, m);
 
 /** Danger: wipe everything (used by "Reset demo data" in Settings). */
 export async function resetAll(): Promise<void> {
