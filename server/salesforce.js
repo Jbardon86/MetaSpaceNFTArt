@@ -91,10 +91,13 @@ async function getToken(force = false) {
 
   const body = new URLSearchParams({
     grant_type: 'client_credentials',
-    client_id: SF_CLIENT_ID,
-    client_secret: SF_CLIENT_SECRET,
+    client_id: SF_CLIENT_ID.trim(),
+    client_secret: SF_CLIENT_SECRET.trim(),
   });
-  const res = await fetch(`${SF_LOGIN_URL.replace(/\/$/, '')}/services/oauth2/token`, {
+  // Trim whitespace/newlines that often sneak in when pasting the My Domain URL,
+  // then strip any trailing slash, so the token URL is always well-formed.
+  const base = SF_LOGIN_URL.trim().replace(/\/+$/, '');
+  const res = await fetch(`${base}/services/oauth2/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
