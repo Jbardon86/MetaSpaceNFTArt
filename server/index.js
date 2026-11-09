@@ -44,6 +44,10 @@ const transporter = nodemailer.createTransport({
   port: Number(SMTP_PORT),
   secure: false, // 587 uses STARTTLS
   auth: SMTP_PASS ? { user: SMTP_USER, pass: SMTP_PASS } : undefined,
+  // Hard timeouts so a mis-/unconfigured SMTP server can never hang a request.
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 15000,
 });
 
 // --- Confirmation email content (kept in sync with the app's template) ---
@@ -238,21 +242,8 @@ app.post('/api/leads', async (req, res) => {
 app.post('/api/orders', async (req, res) => {
   const order = req.body;
   try {
-    // 1) Send the confirmation email (if requested + we have an address).
-    //    Don't let an email hiccup lose the order — log and continue.
-    let emailError = null;
-    if (order.emailConfirmation && order.contact?.email) {
-      try {
-        await transporter.sendMail(buildConfirmationEmail(order));
-      } catch (err) {
-        emailError = String(err && err.message ? err.message : err);
-        console.error('Confirmation email failed:', err);
-      }
-    }
-
-    // 2) Push to Salesforce: create a Lead (contact capture) + an Opportunity
-    //    (the order). Non-fatal: if Salesforce is down or not configured yet,
-    //    the order still succeeds and Staff can re-sync later.
+    // 1) Push to Salesforce FIRST — the record that matters. This must never be
+    //    blocked by email. Creates a Lead (contact capture) + an Opportunity.
     const sf = await salesforce.pushOrder(order);
 
     // Keep the legacy `salesforceId` the app expects (Opportunity first, then
@@ -260,10 +251,26 @@ app.post('/api/orders', async (req, res) => {
     const salesforceId =
       sf.opportunityId || sf.leadId || `local-${(order.id || '').slice(-6).toUpperCase()}`;
 
-    res.json({ salesforceId, salesforce: sf, emailError });
+    // 2) Respond immediately so the kiosk never waits on email.
+    res.json({ salesforceId, salesforce: sf });
+
+    // 3) Confirmation email — best-effort, in the background, never blocks the
+    //    order. Skip entirely if SMTP isn't configured (otherwise the send
+    //    stalls against Microsoft 365).
+    if (order.emailConfirmation && order.contact?.email) {
+      if (SMTP_PASS) {
+        transporter
+          .sendMail(buildConfirmationEmail(order))
+          .catch((err) => console.error('Confirmation email failed:', err));
+      } else {
+        console.warn('Email requested but SMTP_PASS not set — skipping confirmation email.');
+      }
+    }
   } catch (err) {
     console.error('Order handling failed:', err);
-    res.status(500).json({ error: String(err && err.message ? err.message : err) });
+    if (!res.headersSent) {
+      res.status(500).json({ error: String(err && err.message ? err.message : err) });
+    }
   }
 });
 
