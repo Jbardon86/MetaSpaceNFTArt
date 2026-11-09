@@ -15,6 +15,7 @@ const KEYS = {
   boothRep: 'tso.boothRep',
   boothEvent: 'tso.boothEvent',
   approvals: 'tso.approvals',
+  prices: 'tso.prices',
   // Bump this version to re-seed the sample catalog for existing installs
   // (e.g. after adding photos to the seed data).
   seeded: 'tso.seeded.v3',
@@ -76,6 +77,12 @@ export const saveBoothEvent = (s: string | null) =>
 export type ApprovalMap = Record<string, boolean>;
 export const getApprovals = () => readJSON<ApprovalMap>(KEYS.approvals, {});
 export const saveApprovals = (m: ApprovalMap) => writeJSON(KEYS.approvals, m);
+
+// ---- Show prices (per-product price override for the current show) ----
+// Map of productId -> price. Absent = use the SOS list price. Survives syncs.
+export type PriceMap = Record<string, number>;
+export const getPrices = () => readJSON<PriceMap>(KEYS.prices, {});
+export const savePrices = (m: PriceMap) => writeJSON(KEYS.prices, m);
 
 /** Danger: wipe everything (used by "Reset demo data" in Settings). */
 export async function resetAll(): Promise<void> {

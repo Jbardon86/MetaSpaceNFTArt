@@ -22,8 +22,17 @@ import { formatMoney, Product } from '../types';
 import { colors, font, radius, spacing } from '../theme';
 
 export default function CatalogScreen(_props: ScreenProps<'Catalog'>) {
-  const { products, upsertProduct, toggleProductActive, remoteCatalog, catalogSyncing, catalogError, refreshCatalog } =
-    useApp();
+  const {
+    products,
+    upsertProduct,
+    toggleProductActive,
+    setProductPrice,
+    boothEvent,
+    remoteCatalog,
+    catalogSyncing,
+    catalogError,
+    refreshCatalog,
+  } = useApp();
   const insets = useSafeAreaInsets();
   const [editing, setEditing] = useState<Product | 'new' | null>(null);
   const [query, setQuery] = useState('');
@@ -96,7 +105,13 @@ export default function CatalogScreen(_props: ScreenProps<'Catalog'>) {
                 <Text style={[styles.name, !item.active && styles.inactive]}>{item.name}</Text>
                 <Text style={styles.sub}>
                   {item.sku ? `${item.sku} · ` : ''}
-                  {formatMoney(item.price)} / {item.unit}
+                  <Text style={item.listPrice != null && item.listPrice !== item.price ? styles.showPrice : undefined}>
+                    {formatMoney(item.price)}
+                  </Text>
+                  {item.listPrice != null && item.listPrice !== item.price
+                    ? ` (list ${formatMoney(item.listPrice)})`
+                    : ''}{' '}
+                  / {item.unit}
                 </Text>
               </View>
             </Pressable>
@@ -121,8 +136,16 @@ export default function CatalogScreen(_props: ScreenProps<'Catalog'>) {
 
       <ProductEditor
         target={editing}
+        showName={boothEvent}
         onClose={() => setEditing(null)}
         onSave={async (p) => {
+          const ex = editing && editing !== 'new' ? editing : null;
+          if (ex) {
+            // Route the price to the show-price override (null = use SOS list).
+            const list = ex.listPrice != null ? ex.listPrice : ex.price;
+            const entered = p.price ?? list;
+            await setProductPrice(ex.id, entered === list ? null : entered);
+          }
           await upsertProduct(p);
           setEditing(null);
         }}
@@ -133,10 +156,12 @@ export default function CatalogScreen(_props: ScreenProps<'Catalog'>) {
 
 function ProductEditor({
   target,
+  showName,
   onClose,
   onSave,
 }: {
   target: Product | 'new' | null;
+  showName: string;
   onClose: () => void;
   onSave: (p: Partial<Product> & { name: string }) => void;
 }) {
@@ -150,7 +175,7 @@ function ProductEditor({
           style={styles.modalCard}
         >
           {target ? (
-            <EditorForm key={key} existing={existing} onClose={onClose} onSave={onSave} />
+            <EditorForm key={key} existing={existing} showName={showName} onClose={onClose} onSave={onSave} />
           ) : null}
         </KeyboardAvoidingView>
       </View>
@@ -160,13 +185,16 @@ function ProductEditor({
 
 function EditorForm({
   existing,
+  showName,
   onClose,
   onSave,
 }: {
   existing: Product | null;
+  showName: string;
   onClose: () => void;
   onSave: (p: Partial<Product> & { name: string }) => void;
 }) {
+  const listPrice = existing ? (existing.listPrice != null ? existing.listPrice : existing.price) : null;
   const [name, setName] = useState(existing?.name ?? '');
   const [sku, setSku] = useState(existing?.sku ?? '');
   const [price, setPrice] = useState(existing ? String(existing.price) : '');
@@ -266,7 +294,31 @@ function EditorForm({
         </View>
       ) : null}
       <Field label="SKU" value={sku} onChangeText={setSku} placeholder="ABC-123" autoCapitalize="characters" />
-      <Field label="Price ($)" value={price} onChangeText={setPrice} placeholder="0.00" keyboardType="decimal-pad" />
+
+      <Field
+        label={showName ? `Show price ($) — ${showName}` : 'Show price ($)'}
+        value={price}
+        onChangeText={setPrice}
+        placeholder="0.00"
+        keyboardType="decimal-pad"
+      />
+      {listPrice != null ? (
+        <View style={styles.priceRefRow}>
+          <Text style={styles.priceRef}>
+            SOS list price: {formatMoney(listPrice)}
+            {parseFloat(price || '0') !== listPrice ? '  ·  overridden for this show' : ''}
+          </Text>
+          {parseFloat(price || '0') !== listPrice ? (
+            <Pressable onPress={() => setPrice(String(listPrice))}>
+              <Text style={styles.priceReset}>Use list price</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : (
+        <Text style={styles.priceRef}>Charged at the kiosk. Adjust per show as needed.</Text>
+      )}
+
+      <View style={{ height: spacing.md }} />
       <Field label="Unit" value={unit} onChangeText={setUnit} placeholder="each / case / hour" />
 
       <Button title="Save" onPress={save} disabled={name.trim().length === 0} />
@@ -304,6 +356,16 @@ const styles = StyleSheet.create({
   switchWrap: { alignItems: 'center', marginLeft: spacing.sm },
   switchLabel: { fontSize: font.small, color: colors.textMuted, marginTop: 2, fontWeight: '600' },
   switchLabelOn: { color: colors.primary },
+  priceRefRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: -spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  priceRef: { fontSize: font.small, color: colors.textMuted, marginTop: -spacing.sm, marginBottom: spacing.sm },
+  priceReset: { fontSize: font.small, color: colors.primary, fontWeight: '700' },
+  showPrice: { color: colors.primary, fontWeight: '700' },
   footer: {
     position: 'absolute',
     left: 0,

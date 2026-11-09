@@ -31,8 +31,10 @@ export interface Product {
   id: ID;
   name: string;
   sku: string;
-  /** Unit price in dollars. */
+  /** Unit price in dollars charged at the kiosk (the show price, if overridden). */
   price: number;
+  /** The SOS list price, kept for reference/reset when a show price overrides it. */
+  listPrice?: number;
   /** e.g. "each", "case", "hour". Free text. */
   unit: string;
   active: boolean;
