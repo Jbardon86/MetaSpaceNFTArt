@@ -71,7 +71,7 @@ services:
     runtime: static
     branch: main
     rootDir: tradeshow-app
-    buildCommand: npm install && npx expo export --platform web
+    buildCommand: npm install && npx expo export --platform web && node scripts/inject-pwa-icon.js
     staticPublishPath: dist
     routes:
       - type: rewrite
