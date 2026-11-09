@@ -215,7 +215,7 @@ export default function DetailsScreen({ navigation }: ScreenProps<'Details'>) {
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 100 }}
+        contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 200 }}
       >
         <Text style={styles.heading}>Your details</Text>
         <Text style={styles.sub}>So we can follow up on your order.</Text>
