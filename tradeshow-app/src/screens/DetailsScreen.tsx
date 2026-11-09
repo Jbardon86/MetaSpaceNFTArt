@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Field } from '../components/ui';
@@ -71,8 +71,12 @@ export default function DetailsScreen({ navigation }: ScreenProps<'Details'>) {
   const [phone, setPhone] = useState(draft.customer?.phone ?? '');
   const [scanning, setScanning] = useState(false);
   const [savingLead, setSavingLead] = useState(false);
+  const [leadSavedName, setLeadSavedName] = useState<string | null>(null);
+  const [leadError, setLeadError] = useState<string | null>(null);
 
   const canContinue = name.trim().length > 0 && (email.trim().length > 0 || phone.trim().length > 0);
+  // A lead just needs a name — someone leaving contact info without ordering.
+  const canSaveLead = name.trim().length > 0;
 
   // Ask for camera access; returns true if we can proceed.
   const ensureCamera = async () => {
@@ -187,6 +191,7 @@ export default function DetailsScreen({ navigation }: ScreenProps<'Details'>) {
   // Not ordering today — just capture this person as a Salesforce Lead for the
   // show. Great right after scanning a badge or business card.
   const saveLead = async () => {
+    setLeadError(null);
     setSavingLead(true);
     try {
       const billTo = draft.billSameAsShip ? draft.shipTo : draft.billTo;
@@ -198,13 +203,9 @@ export default function DetailsScreen({ navigation }: ScreenProps<'Details'>) {
         shippingAddress: draft.shipTo,
         billingAddress: billTo,
       });
-      Alert.alert(
-        'Saved — thanks!',
-        `${name.trim() || 'Your info'} was added to our leads for this show. We'll be in touch.`,
-        [{ text: 'Done', onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] }) }]
-      );
+      setLeadSavedName(name.trim() || 'Your info'); // shows the success modal
     } catch (e) {
-      Alert.alert('Could not save', e instanceof Error ? e.message : 'Please try again.');
+      setLeadError(e instanceof Error ? e.message : 'Something went wrong. Please try again.');
     } finally {
       setSavingLead(false);
     }
@@ -275,16 +276,37 @@ export default function DetailsScreen({ navigation }: ScreenProps<'Details'>) {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
+        {leadError ? <Text style={styles.errorText}>{leadError}</Text> : null}
         <Button title="Continue to products" onPress={cont} disabled={!canContinue || savingLead} />
         <View style={{ height: spacing.sm }} />
         <Button
           title={savingLead ? 'Saving…' : 'Not ordering today — just save my info'}
           variant="secondary"
           onPress={saveLead}
-          disabled={!canContinue}
+          disabled={!canSaveLead || savingLead}
           loading={savingLead}
         />
       </View>
+
+      <Modal visible={!!leadSavedName} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalCheck}>✓</Text>
+            <Text style={styles.modalTitle}>Saved — thanks!</Text>
+            <Text style={styles.modalBody}>
+              {leadSavedName} was added to our leads for this show. We'll be in touch.
+            </Text>
+            <View style={{ height: spacing.lg }} />
+            <Button
+              title="Done"
+              onPress={() => {
+                setLeadSavedName(null);
+                navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
+              }}
+            />
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -310,6 +332,41 @@ const styles = StyleSheet.create({
   },
   optInLabel: { fontSize: font.body, fontWeight: '600', color: colors.text },
   optInSub: { fontSize: font.small, color: colors.textMuted, marginTop: 2 },
+  errorText: {
+    fontSize: font.small,
+    color: '#D7263D',
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+  },
+  modalCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    padding: spacing.xl,
+    width: '100%',
+    maxWidth: 420,
+    alignItems: 'center',
+  },
+  modalCheck: {
+    fontSize: 44,
+    color: colors.primary,
+    fontWeight: '900',
+    marginBottom: spacing.sm,
+  },
+  modalTitle: { fontSize: font.h2, fontWeight: '800', color: colors.text, textAlign: 'center' },
+  modalBody: {
+    fontSize: font.body,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+  },
   footer: {
     position: 'absolute',
     left: 0,
