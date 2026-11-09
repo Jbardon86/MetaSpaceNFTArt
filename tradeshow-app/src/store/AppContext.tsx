@@ -39,6 +39,8 @@ interface AppState {
   // catalog
   upsertProduct: (p: Partial<Product> & { name: string }) => Promise<void>;
   toggleProductActive: (id: string) => Promise<void>;
+  /** Set the kiosk (show) price for a product; null = use the SOS list price. */
+  setProductPrice: (id: string, value: number | null) => Promise<void>;
   /** Whether the catalog is managed remotely (SOS via backend). */
   remoteCatalog: boolean;
   catalogSyncing: boolean;
@@ -77,11 +79,26 @@ interface AppState {
 
 const Ctx = createContext<AppState | undefined>(undefined);
 
-// A product is shown to customers only if the admin has approved it. Approval
-// lives in a separate map (db) that survives SOS re-syncs, so `active` is always
-// derived from it here. Unknown/new products default to NOT approved (hidden).
-function withApprovals(list: Product[], approvals: db.ApprovalMap): Product[] {
-  return list.map((p) => ({ ...p, active: approvals[p.id] === true }));
+// Apply the admin's overrides, which live in separate maps (db) so they survive
+// SOS re-syncs:
+//  - approval: a product is shown to customers only if approved (default hidden)
+//  - show price: `price` uses the per-product override if set, else the SOS list
+//    price (preserved in `listPrice`)
+function applyCatalog(
+  list: Product[],
+  approvals: db.ApprovalMap,
+  prices: db.PriceMap
+): Product[] {
+  return list.map((p) => {
+    const listPrice = p.listPrice != null ? p.listPrice : p.price; // SOS list price
+    const override = prices[p.id];
+    return {
+      ...p,
+      listPrice,
+      price: override != null ? override : listPrice,
+      active: approvals[p.id] === true,
+    };
+  });
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
@@ -96,6 +113,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [boothRep, setBoothRepState] = useState<Rep | null>(null);
   const [boothEvent, setBoothEventState] = useState<string>('');
   const approvalsRef = useRef<db.ApprovalMap>({});
+  const pricesRef = useRef<db.PriceMap>({});
   const syncing = useRef(false);
 
   // Pull the shared catalog from the backend (SOS). Falls back to the locally
@@ -107,9 +125,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       const remote = await fetchRemoteCatalog();
       if (remote && remote.length > 0) {
-        // Apply the admin's approvals so curation survives the sync; new SOS
-        // items arrive hidden until the admin approves them.
-        const applied = withApprovals(remote, approvalsRef.current);
+        // Apply approvals + show prices so curation survives the sync; new SOS
+        // items arrive hidden and at list price until the admin changes them.
+        const applied = applyCatalog(remote, approvalsRef.current, pricesRef.current);
         setProducts(applied);
         db.saveProducts(applied); // cache for offline
         setLastCatalogSync(new Date().toISOString());
@@ -125,7 +143,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       await db.ensureSeeded();
-      const [s, p, c, o, br, be, appr] = await Promise.all([
+      const [s, p, c, o, br, be, appr, prices] = await Promise.all([
         db.getSession(),
         db.getProducts(),
         db.getCustomers(),
@@ -133,10 +151,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         db.getBoothRep(),
         db.getBoothEvent(),
         db.getApprovals(),
+        db.getPrices(),
       ]);
       approvalsRef.current = appr;
+      pricesRef.current = prices;
       setSession(s);
-      setProducts(withApprovals(p, appr)); // only approved products are shown
+      setProducts(applyCatalog(p, appr, prices)); // approvals + show prices applied
       setCustomers(c);
       setOrders(o);
       setBoothRepState(br);
@@ -174,21 +194,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setProducts((prev) => {
         let next: Product[];
         if (p.id && prev.some((x) => x.id === p.id)) {
-          // Edit: keep approval-derived visibility, don't let the form flip it.
-          next = prev.map((x) =>
-            x.id === p.id ? { ...x, ...p, active: approvalsRef.current[x.id] === true } : x
-          );
+          // Edit: visibility stays approval-derived and price stays override-
+          // derived (the editor sets the price through setProductPrice), so the
+          // form can't silently flip either.
+          next = prev.map((x) => {
+            if (x.id !== p.id) return x;
+            const listPrice = x.listPrice != null ? x.listPrice : x.price;
+            const override = pricesRef.current[x.id];
+            return {
+              ...x,
+              ...p,
+              listPrice,
+              price: override != null ? override : listPrice,
+              active: approvalsRef.current[x.id] === true,
+            };
+          });
         } else {
           const id = p.id ?? newId();
           // A product the admin adds by hand is approved (shown) by default.
           const nextApprovals: db.ApprovalMap = { ...approvalsRef.current, [id]: true };
           approvalsRef.current = nextApprovals;
           db.saveApprovals(nextApprovals);
+          const base = p.price ?? 0;
           const created: Product = {
             id,
             name: p.name,
             sku: p.sku ?? '',
-            price: p.price ?? 0,
+            price: base,
+            listPrice: base,
             unit: p.unit ?? 'each',
             active: true,
             description: p.description ?? '',
@@ -220,6 +253,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       );
       db.saveProducts(next);
       return next;
+    });
+  }, []);
+
+  // Set the show price for a product (what the kiosk charges). Pass null to
+  // clear it and fall back to the SOS list price. Survives SOS re-syncs.
+  const setProductPrice = useCallback(async (id: string, value: number | null) => {
+    const next: db.PriceMap = { ...pricesRef.current };
+    if (value == null || Number.isNaN(value)) delete next[id];
+    else next[id] = value;
+    pricesRef.current = next;
+    db.savePrices(next);
+    setProducts((prev) => {
+      const updated = prev.map((x) => {
+        if (x.id !== id) return x;
+        const listPrice = x.listPrice != null ? x.listPrice : x.price;
+        return { ...x, listPrice, price: next[id] != null ? next[id] : listPrice };
+      });
+      db.saveProducts(updated);
+      return updated;
     });
   }, []);
 
@@ -347,6 +399,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setBoothEvent,
     upsertProduct,
     toggleProductActive,
+    setProductPrice,
     remoteCatalog: usesRemoteCatalog,
     catalogSyncing,
     lastCatalogSync,
