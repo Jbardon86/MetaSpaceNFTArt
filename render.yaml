@@ -77,3 +77,30 @@ services:
       - type: rewrite
         source: /*
         destination: /index.html
+
+  # Magic Straws shipping-label bot: buys USPS Ground Advantage labels for paid,
+  # unfulfilled Shopify orders. Schedule is UTC: every 30 min, 12:00-23:30 UTC
+  # Mon-Fri = 6:00 AM-5:30 PM Central (standard time). Keep DRY_RUN "true" until
+  # the first run's log looks right, then set it to "false" in the dashboard.
+  - type: cron
+    name: magicstraws-shipping-label-bot
+    runtime: node
+    plan: starter
+    branch: main
+    rootDir: shipping-label-bot
+    schedule: "0,30 12-23 * * 1-5"
+    buildCommand: "true"
+    startCommand: node index.js
+    envVars:
+      - key: SHOPIFY_SHOP
+        value: magic-sparkle-shop-slbiu
+      - key: DRY_RUN
+        value: "true"
+      - key: MAX_LABELS_PER_RUN
+        value: "15"
+      - key: MAX_UNITS_PER_ORDER
+        value: "24"
+      - key: SHOPIFY_CLIENT_ID
+        sync: false
+      - key: SHOPIFY_CLIENT_SECRET
+        sync: false
