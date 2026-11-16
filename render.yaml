@@ -120,7 +120,7 @@ services:
       # into SOS sales receipts, "off" = skip. Calls go through the backend,
       # which holds the one SOS login.
       - key: SOS_SYNC
-        value: dry
+        value: "on"
       - key: BACKEND_URL
         value: https://endlessfun-orders-backend.onrender.com
       - key: LABEL_BOT_KEY
