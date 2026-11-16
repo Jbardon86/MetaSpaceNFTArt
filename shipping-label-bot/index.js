@@ -10,6 +10,15 @@
 //   DRY_RUN                 "true" = only log what it would buy (default true)
 //   MAX_LABELS_PER_RUN      safety cap per run (default 15)
 //   MAX_UNITS_PER_ORDER     orders above this many units are held (default 24)
+//   SOS_SYNC                "on" = write tracking into SOS, "dry" = check only
+//                           and log (default), "off" = skip the SOS step
+//   BACKEND_URL             endlessfun-orders-backend URL (does the SOS calls)
+//   LABEL_BOT_KEY           shared secret for the backend's /api/sos/tracking
+//
+// SOS step: every shipped order from the last 7 days without "sos-saved" or
+// "sos-error" gets its tracking written onto the SOS sales receipt whose
+// Customer PO is "Shopify order #N". Tags "sos-saved" when SOS confirms it,
+// "sos-error" when something doesn't match (a person must look).
 
 const SHOP = process.env.SHOPIFY_SHOP;
 const API = `https://${SHOP}.myshopify.com/admin/api/2026-10/graphql.json`;
@@ -85,6 +94,68 @@ async function buyLabel(fulfillmentOrderId) {
   throw new Error("Purchase still pending after 60s; check Shopify before retrying");
 }
 
+const SOS_SYNC = (process.env.SOS_SYNC || "dry").toLowerCase();
+
+async function sosTag(orderId, tags) {
+  await gql(`mutation($id: ID!, $tags: [String!]!) { tagsAdd(id: $id, tags: $tags) { userErrors { message } } }`,
+    { id: orderId, tags });
+}
+
+async function syncSos() {
+  const base = (process.env.BACKEND_URL || "").replace(/\/$/, "");
+  const key = process.env.LABEL_BOT_KEY;
+  if (SOS_SYNC === "off") return;
+  if (!base || !key) { console.log("SOS step skipped: BACKEND_URL or LABEL_BOT_KEY not set"); return; }
+  const live = SOS_SYNC === "on";
+
+  const since = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  const d = await gql(`query($q: String!) { orders(first: 40, query: $q, sortKey: CREATED_AT) { nodes {
+      id name tags createdAt totalPriceSet { shopMoney { amount } }
+      fulfillments { status trackingInfo { number } } } } }`,
+    { q: `fulfillment_status:shipped created_at:>=${since} -tag:sos-saved -tag:sos-error` });
+  const orders = d.orders.nodes;
+  if (!orders.length) { console.log("SOS: nothing to do"); return; }
+
+  // The backend sleeps when idle (free plan); wake it first.
+  try { await fetch(`${base}/health`, { signal: AbortSignal.timeout(120000) }); }
+  catch (e) { console.error(`SOS step skipped: backend not reachable (${e.message})`); return; }
+
+  console.log(`SOS step (${live ? "LIVE" : "DRY - check only"}): ${orders.length} order(s)`);
+  for (const o of orders) {
+    const num = o.name.replace("#", "");
+    const nums = [...new Set(o.fulfillments.filter((f) => f.status !== "CANCELLED")
+      .flatMap((f) => f.trackingInfo.map((t) => (t.number || "").trim())).filter(Boolean))];
+    if (nums.length !== 1) {
+      console.log(`SOS ${o.name}: ${nums.length} tracking numbers; needs a person`);
+      if (live && nums.length > 1) await sosTag(o.id, ["sos-error"]);
+      continue;
+    }
+    const body = {
+      order: num, tracking: nums[0],
+      customer: o.tags.includes("Target") ? "Target+" : "Shopify Customer",
+      total: Number(o.totalPriceSet.shopMoney.amount), dryRun: !live,
+    };
+    let out;
+    try {
+      const r = await fetch(`${base}/api/sos/tracking`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-bot-key": key },
+        body: JSON.stringify(body), signal: AbortSignal.timeout(90000),
+      });
+      out = await r.json().catch(() => ({ result: "error", error: `HTTP ${r.status}` }));
+      if (!r.ok && !out.result) out.result = "error";
+    } catch (e) { out = { result: "error", error: e.message }; }
+
+    const tail = `${out.receipt ? " receipt " + out.receipt : ""}${out.reason ? " - " + out.reason : ""}${out.error ? " - " + out.error : ""}`;
+    console.log(`SOS ${o.name}: ${out.result}${tail}${out.fields ? " fields=" + out.fields.join(",") : ""}`);
+    if (!live) continue;
+    if (out.result === "saved" || out.result === "already") await sosTag(o.id, ["sos-saved"]);
+    else if (out.result === "mismatch") await sosTag(o.id, ["sos-error"]);
+    else if (out.result === "notfound" && Date.now() - Date.parse(o.createdAt) > 86400000) await sosTag(o.id, ["sos-error"]);
+    // "error" / recent "notfound": leave untagged, retry next run
+  }
+}
+
 async function main() {
   for (const k of ["SHOPIFY_SHOP", "SHOPIFY_CLIENT_ID", "SHOPIFY_CLIENT_SECRET"])
     if (!process.env[k]) throw new Error(`Missing env var ${k}`);
@@ -125,7 +196,10 @@ async function main() {
       await tag(o.id, ["label-error"]);
     }
   }
-  console.log(`Run end: ${bought} label(s) ${DRY_RUN ? "would be bought" : "bought"}.`);
+  console.log(`Labels: ${bought} label(s) ${DRY_RUN ? "would be bought" : "bought"}.`);
+
+  try { await syncSos(); } catch (e) { console.error(`SOS step failed: ${e.message}`); process.exitCode = 1; }
+  console.log("Run end.");
 }
 
 main().catch((e) => { console.error(e); process.exitCode = 1; });
