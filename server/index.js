@@ -224,6 +224,35 @@ app.get('/api/catalog', async (req, res) => {
   }
 });
 
+// Shipping-label bot -> SOS: write a Shopify tracking number onto the matching
+// SOS sales receipt. Private: only the label bot knows LABEL_BOT_KEY (Render
+// generates it and shares it with the bot). Body:
+//   { order: "1847", tracking: "9200...", customer: "Target+"|"Shopify Customer",
+//     total: 12.34, dryRun: true|false }
+const crypto = require('crypto');
+function botKeyOk(req) {
+  const want = process.env.LABEL_BOT_KEY || '';
+  const got = String(req.get('x-bot-key') || '');
+  if (!want || got.length !== want.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(got), Buffer.from(want));
+}
+app.post('/api/sos/tracking', async (req, res) => {
+  if (!botKeyOk(req)) return res.status(401).json({ error: 'unauthorized' });
+  const { order, tracking, customer, total, dryRun } = req.body || {};
+  if (!/^\d{3,7}$/.test(String(order || ''))) return res.status(400).json({ error: 'bad order' });
+  if (!/^[0-9A-Z]{10,40}$/.test(String(tracking || ''))) return res.status(400).json({ error: 'bad tracking' });
+  if (!['Target+', 'Shopify Customer'].includes(customer)) return res.status(400).json({ error: 'bad customer' });
+  if (!Number.isFinite(Number(total))) return res.status(400).json({ error: 'bad total' });
+  try {
+    const out = await sos.saveTracking({ order: String(order), tracking: String(tracking), customer, total: Number(total), dryRun: dryRun !== false });
+    console.log(`SOS tracking #${order}: ${out.result}${out.receipt ? ' receipt ' + out.receipt : ''}${out.reason ? ' - ' + out.reason : ''}`);
+    res.json(out);
+  } catch (err) {
+    console.error(`SOS tracking #${order} error:`, err.message);
+    res.status(502).json({ result: 'error', error: String(err.message || err) });
+  }
+});
+
 // Lead-only capture: someone who isn't ordering today. Creates just a
 // Salesforce Lead tagged to the show (LeadSource). Payload has the same contact/
 // account/address/event shape as an order, minus the lines.
