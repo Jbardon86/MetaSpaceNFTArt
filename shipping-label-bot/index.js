@@ -1,4 +1,8 @@
 // Endless Fun - Magic Straws shipping-label bot (Render cron job).
+// THE ONE PLACE this workflow runs. Each run, in order:
+//   1. buy USPS Ground Advantage labels for paid, unfulfilled orders
+//   2. save label + 4x6 packing slip PDFs to OneDrive (docs.js) -> tag "docs-saved"
+//   3. write tracking numbers into SOS sales receipts       -> tag "sos-saved"
 // Every run: find paid, unfulfilled, open Shopify orders and buy a
 // USPS Ground Advantage label for each (Shopify Shipping, charged to the
 // store's Shopify billing). Tags each order "auto-labeled" or "label-error".
@@ -10,6 +14,7 @@
 //   DRY_RUN                 "true" = only log what it would buy (default true)
 //   MAX_LABELS_PER_RUN      safety cap per run (default 15)
 //   MAX_UNITS_PER_ORDER     orders above this many units are held (default 24)
+//   MS_TENANT_ID / MS_CLIENT_ID / MS_CLIENT_SECRET  OneDrive upload app (docs.js)
 //   SOS_SYNC                "on" = write tracking into SOS, "dry" = check only
 //                           and log (default), "off" = skip the SOS step
 //   BACKEND_URL             endlessfun-orders-backend URL (does the SOS calls)
@@ -19,6 +24,8 @@
 // "sos-error" gets its tracking written onto the SOS sales receipt whose
 // Customer PO is "Shopify order #N". Tags "sos-saved" when SOS confirms it,
 // "sos-error" when something doesn't match (a person must look).
+
+import { syncDocs } from "./docs.js";
 
 const SHOP = process.env.SHOPIFY_SHOP;
 const API = `https://${SHOP}.myshopify.com/admin/api/2026-10/graphql.json`;
@@ -197,6 +204,11 @@ async function main() {
     }
   }
   console.log(`Labels: ${bought} label(s) ${DRY_RUN ? "would be bought" : "bought"}.`);
+
+  try {
+    const r = await syncDocs({ gql, tag: sosTag });
+    if (r.errors || r.skipped) process.exitCode = 1; // shows as a failed run in Render
+  } catch (e) { console.error(`DOCS step failed: ${e.message}`); process.exitCode = 1; }
 
   try { await syncSos(); } catch (e) { console.error(`SOS step failed: ${e.message}`); process.exitCode = 1; }
   console.log("Run end.");
