@@ -89,8 +89,9 @@ services:
         source: /*
         destination: /index.html
 
-  # Magic Straws shipping-label bot: buys USPS Ground Advantage labels for paid,
-  # unfulfilled Shopify orders. Schedule is UTC: every 30 min, 10:00-23:30 UTC
+  # Magic Straws shipping bot - THE ONE PLACE this workflow runs. Each run:
+  # buys USPS Ground Advantage labels for paid, unfulfilled Shopify orders,
+  # saves label + packing slip PDFs to OneDrive, writes tracking into SOS. Schedule is UTC: every 30 min, 10:00-23:30 UTC
   # every day = 4:00 AM-5:30 PM Central (standard time). DRY_RUN "false" = live
   # label buying (set 2026-11-13). "true" = test mode, logs only.
   # Each run also writes tracking numbers into SOS (see SOS_SYNC).
@@ -101,7 +102,7 @@ services:
     branch: main
     rootDir: shipping-label-bot
     schedule: "0,30 10-23 * * *"
-    buildCommand: "true"
+    buildCommand: npm install
     startCommand: node index.js
     envVars:
       - key: SHOPIFY_SHOP
@@ -128,3 +129,11 @@ services:
           type: web
           name: endlessfun-orders-backend
           envVarKey: LABEL_BOT_KEY
+      # OneDrive upload ("Claude Shopify Uploader" app, reachco.biz tenant).
+      # Set in the Render dashboard; never commit these values.
+      - key: MS_TENANT_ID
+        sync: false
+      - key: MS_CLIENT_ID
+        sync: false
+      - key: MS_CLIENT_SECRET
+        sync: false
