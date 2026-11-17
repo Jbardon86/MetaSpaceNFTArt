@@ -2,8 +2,15 @@
   "name": "shipping-label-bot",
   "version": "1.0.0",
   "private": true,
-  "description": "Endless Fun: buys USPS Ground Advantage labels for paid, unfulfilled Magic Straws Shopify orders.",
+  "description": "Endless Fun: Magic Straws shipping bot - buys USPS Ground Advantage labels, saves label + packing slip PDFs to OneDrive, writes tracking into SOS.",
   "type": "module",
-  "engines": { "node": ">=20" },
-  "scripts": { "start": "node index.js" }
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "pdfkit": "0.15.2"
+  }
 }
