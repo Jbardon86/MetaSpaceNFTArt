@@ -145,6 +145,8 @@ export async function syncDocs({ gql, tag, log = console.log }) {
   for (const k of ["MS_TENANT_ID", "MS_CLIENT_ID", "MS_CLIENT_SECRET"]) {
     if (!process.env[k]) { log(`DOCS step skipped: ${k} not set`); return { skipped: true }; }
   }
+  // Sign in every run, even with no work, so a bad or expired secret shows up at once.
+  const tok = await graphToken();
   const since = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
   const d = await gql(`query($q: String!) { orders(first: 40, query: $q, sortKey: CREATED_AT) { nodes {
       id name tags createdAt customAttributes { key value }
@@ -153,9 +155,8 @@ export async function syncDocs({ gql, tag, log = console.log }) {
       fulfillments { status shippingLabel { shippingDocuments { documentType url } } } } } }`,
     { q: `fulfillment_status:shipped created_at:>=${since} -tag:docs-saved -tag:docs-none` });
   const orders = d.orders.nodes;
-  if (!orders.length) { log("DOCS: nothing to do"); return { saved: 0 }; }
+  if (!orders.length) { log("DOCS: Microsoft sign-in OK; nothing to do"); return { saved: 0 }; }
 
-  const tok = await graphToken();
   const day = chicagoDate();
   const folder = await ensureFolder(tok, PARENT, day);
   await ensureFolder(tok, folder, "Shipped");
