@@ -205,6 +205,10 @@ async function main() {
   }
   console.log(`Labels: ${bought} label(s) ${DRY_RUN ? "would be bought" : "bought"}.`);
 
+  // Shopify's order search takes a little while to show a just-bought label as
+  // shipped; wait so those orders get their files in this same run.
+  if (bought > 0 && !DRY_RUN) await new Promise((r) => setTimeout(r, 30000));
+
   try {
     const r = await syncDocs({ gql, tag: sosTag });
     if (r.errors || r.skipped) process.exitCode = 1; // shows as a failed run in Render
