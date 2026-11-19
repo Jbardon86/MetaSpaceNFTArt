@@ -111,8 +111,9 @@ services:
         value: "false"
       - key: MAX_LABELS_PER_RUN
         value: "15"
+      # No size hold (Mr. Bardon, 2026-11-19): ship every order, any quantity.
       - key: MAX_UNITS_PER_ORDER
-        value: "24"
+        value: "100000"
       - key: SHOPIFY_CLIENT_ID
         sync: false
       - key: SHOPIFY_CLIENT_SECRET
